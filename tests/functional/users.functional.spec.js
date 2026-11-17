@@ -1,7 +1,9 @@
 import { expect } from 'chai';
 import mongoose from 'mongoose';
 import request from 'supertest';
+import bcrypt from 'bcrypt';
 import app from '../../src/app.js';
+import User from '../../src/models/user.model.js';
 
 const createUserPayload = () => {
   const unique = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
@@ -32,6 +34,21 @@ describe('Functional - Users API', () => {
     expect(response.body.payload[0]).to.not.have.property('password');
   });
 
+  it('GET /api/users aplica paginación y filtro por role', async () => {
+    const driverPayload = { ...createUserPayload(), role: 'driver' };
+    const userPayload = { ...createUserPayload(), role: 'user' };
+
+    await request(app).post('/api/users').send(driverPayload);
+    await request(app).post('/api/users').send(userPayload);
+
+    const response = await request(app).get('/api/users?page=1&limit=1&role=driver');
+
+    expect(response.status).to.equal(200);
+    expect(response.body.status).to.equal('success');
+    expect(response.body.payload).to.be.an('array').with.length.at.most(1);
+    expect(response.body.payload[0].role).to.equal('driver');
+  });
+
   it('POST /api/users crea un usuario con datos válidos', async () => {
     const payload = createUserPayload();
 
@@ -45,6 +62,22 @@ describe('Functional - Users API', () => {
     expect(response.body.payload).to.include.keys('_id', 'firstName', 'lastName', 'email', 'role');
     expect(response.body.payload.email).to.equal(payload.email);
     expect(response.body.payload).to.not.have.property('password');
+  });
+
+  it('POST /api/users almacena la contraseña hasheada', async () => {
+    const payload = createUserPayload();
+
+    const response = await request(app).post('/api/users').send(payload);
+    expect(response.status).to.equal(201);
+
+    const storedUser = await User.findById(response.body.payload._id).lean();
+    expect(storedUser).to.exist;
+    expect(storedUser.password).to.be.a('string');
+    expect(storedUser.password).to.not.equal(payload.password);
+    expect(storedUser.password.startsWith('$2')).to.equal(true);
+
+    const passwordMatches = await bcrypt.compare(payload.password, storedUser.password);
+    expect(passwordMatches).to.equal(true);
   });
 
   it('GET /api/users/:id devuelve un usuario existente', async () => {

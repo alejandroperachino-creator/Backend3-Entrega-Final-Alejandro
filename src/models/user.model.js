@@ -8,6 +8,7 @@ const documentSchema = new mongoose.Schema({
   mimetype: { type: String, required: true },
   size: { type: Number, required: true },
   type: { type: String, required: true },
+  hash: { type: String },
   uploadedAt: { type: Date, default: Date.now }
   
 }, {_id: false});
@@ -58,6 +59,9 @@ const userSchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+userSchema.index({ role: 1, createdAt: -1 });
+userSchema.index({ email: 1, createdAt: -1 });
 
 const User = mongoose.model('User', userSchema);
 

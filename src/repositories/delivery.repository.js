@@ -1,10 +1,13 @@
 import Delivery from '../models/delivery.model.js';
 
 class DeliveryRepository {
-    async findAll(filter = {}) {
+    async findAll({ filter = {}, pagination = {} } = {}) {
     return Delivery.find(filter)
         .populate('order')
-        .populate('driver', 'firstName lastName email role');
+        .populate('driver', 'firstName lastName email role')
+        .sort({ createdAt: -1 })
+        .skip(Number(pagination.skip) || 0)
+        .limit(Number(pagination.limit) || 20);
     }
 
     async findById(id) {
@@ -13,7 +16,18 @@ class DeliveryRepository {
         .populate('driver', 'firstName lastName email role');
     }
 
-    async create(deliveryData) {
+    async findByOrder(orderId) {
+    return Delivery.findOne({ order: orderId })
+        .populate('order')
+        .populate('driver', 'firstName lastName email role');
+    }
+
+    async create(deliveryData, options = {}) {
+    if (options.session) {
+        const createdDeliveries = await Delivery.create([deliveryData], options);
+        return createdDeliveries[0];
+    }
+
     return Delivery.create(deliveryData);
     }
 

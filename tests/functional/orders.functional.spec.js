@@ -41,6 +41,24 @@ describe('Functional - Orders API', () => {
     expect(response.body.payload[0]).to.include.keys('_id', 'customer', 'items', 'status', 'priority', 'total');
   });
 
+  it('GET /api/orders aplica paginación y filtros', async () => {
+    const firstUser = await request(app).post('/api/users').send(createUserPayload());
+    const secondUser = await request(app).post('/api/users').send(createUserPayload());
+
+    await request(app).post('/api/orders').send(createOrderPayload(firstUser.body.payload._id));
+    await request(app).post('/api/orders').send(createOrderPayload(secondUser.body.payload._id));
+
+    const response = await request(app)
+      .get(`/api/orders?page=1&limit=1&status=${ORDER_STATUS.CREATED}&customer=${firstUser.body.payload._id}`);
+
+    expect(response.status).to.equal(200);
+    expect(response.body.status).to.equal('success');
+    expect(response.body.payload).to.be.an('array').with.length.at.most(1);
+    expect(response.body.payload[0].status).to.equal(ORDER_STATUS.CREATED);
+    const responseCustomerId = response.body.payload[0].customer?._id || response.body.payload[0].customer;
+    expect(String(responseCustomerId)).to.equal(firstUser.body.payload._id);
+  });
+
   it('POST /api/orders crea un pedido con datos válidos', async () => {
     const userResponse = await request(app).post('/api/users').send(createUserPayload());
     const customerId = userResponse.body.payload._id;

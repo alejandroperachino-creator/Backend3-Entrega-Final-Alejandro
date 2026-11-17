@@ -17,7 +17,8 @@ const deliverySchema = new mongoose.Schema({
   order: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Order',
-    required: [true, 'El pedido es obligatorio']
+    required: [true, 'El pedido es obligatorio'],
+    unique: true
   },
   driver: {
     type: mongoose.Schema.Types.ObjectId,
@@ -49,6 +50,9 @@ const deliverySchema = new mongoose.Schema({
 }, {
   timestamps: true
 });
+
+deliverySchema.index({ status: 1, createdAt: -1 });
+deliverySchema.index({ driver: 1, createdAt: -1 });
 
 const Delivery = mongoose.model('Delivery', deliverySchema);
 

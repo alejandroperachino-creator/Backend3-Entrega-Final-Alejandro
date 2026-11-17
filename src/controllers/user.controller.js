@@ -33,7 +33,7 @@ class UserController {
 
   async getAll(req, res, next) {
     try {
-      const users = await this.userService.getAllUsers();
+      const users = await this.userService.getAllUsers(req.query || {});
       return res.status(200).json({
         status: 'success',
         message: 'Usuarios obtenidos exitosamente',

@@ -1,12 +1,21 @@
 import { Router } from 'express';
 import userController from '../controllers/user.controller.js';
-import { uploadDocument } from '../middlewares/uploadMIddleware.js';
+import { uploadDocument } from '../middlewares/uploadFileMiddleware.js';
+import { requireRoles } from '../middlewares/auth.js';
+import { USER_ROLES } from '../constants/index.js';
+import {
+    validateObjectIdParam,
+    requireBodyFields,
+    requireNonEmptyBody
+} from '../middlewares/requestValidation.js';
 
 
 const router = Router();
 
 router.post(
     '/:id/documents',
+    validateObjectIdParam('id'),
+    ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.USER, USER_ROLES.DRIVER, USER_ROLES.STORE]),
     uploadDocument.single('document'),
     userController.uploadDocument
 );
@@ -17,6 +26,8 @@ router.post(
  *   post:
  *     summary: Subir documento del usuario
  *     tags: ["Users"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -47,6 +58,8 @@ router.post(
  *         description: Documento cargado exitosamente
  *       400:
  *         description: Archivo faltante, tipo inválido, tipo de documento inválido o tamaño excedido
+ *       409:
+ *         description: El usuario ya tiene cargado el mismo archivo (duplicado binario)
  *       404:
  *         description: Usuario no encontrado
  */
@@ -88,6 +101,15 @@ router.post(
  *               reference:
  *                 type: string
  *                 example: "12345678"
+ *               document:
+ *                 type: object
+ *                 properties:
+ *                   type:
+ *                     type: string
+ *                     example: "dni"
+ *                   hash:
+ *                     type: string
+ *                     example: "2f7a4d229eb6f56f4b385f0f9d7b6d0f2d7f0ea6d96bda4b57f2c6eb2f3df9a1"
  *         createdAt:
  *           type: string
  *           format: date-time
@@ -330,6 +352,37 @@ router.post(
  *   get:
  *     summary: Obtener todos los usuarios
  *     tags: ["Users"]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Página de resultados
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Límite de resultados por página
+ *       - in: query
+ *         name: role
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [admin, user, driver, store]
+ *         description: Filtrar por rol
+ *       - in: query
+ *         name: email
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por email exacto
  *     responses:
  *       200:
  *         $ref: "#/components/responses/UsersListOk"
@@ -361,7 +414,7 @@ router.get('/', userController.getAll);
  *       500:
  *         $ref: "#/components/responses/InternalServerError"
  */
-router.get('/:id', userController.getById);
+router.get('/:id', validateObjectIdParam('id'), userController.getById);
 
 /**
  * @openapi
@@ -369,6 +422,8 @@ router.get('/:id', userController.getById);
  *   post:
  *     summary: Crear un nuevo usuario
  *     tags: ["Users"]
+ *     security:
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -387,7 +442,12 @@ router.get('/:id', userController.getById);
  *       500:
  *         $ref: "#/components/responses/InternalServerError"
  */
-router.post('/', userController.create);
+router.post(
+    '/',
+    ...requireRoles([USER_ROLES.ADMIN]),
+    requireBodyFields(['firstName', 'lastName', 'email', 'password']),
+    userController.create
+);
 
 /**
  * @openapi
@@ -395,6 +455,8 @@ router.post('/', userController.create);
  *   put:
  *     summary: Actualizar un usuario por ID
  *     tags: ["Users"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -420,7 +482,13 @@ router.post('/', userController.create);
  *       500:
  *         $ref: "#/components/responses/InternalServerError"
  */
-router.put('/:id', userController.update);
+router.put(
+    '/:id',
+    validateObjectIdParam('id'),
+    ...requireRoles([USER_ROLES.ADMIN]),
+    requireNonEmptyBody,
+    userController.update
+);
 
 /**
  * @openapi
@@ -428,6 +496,8 @@ router.put('/:id', userController.update);
  *   delete:
  *     summary: Eliminar un usuario por ID
  *     tags: ["Users"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -445,6 +515,6 @@ router.put('/:id', userController.update);
  *       500:
  *         $ref: "#/components/responses/InternalServerError"
  */
-router.delete('/:id', userController.delete);
+router.delete('/:id', validateObjectIdParam('id'), ...requireRoles([USER_ROLES.ADMIN]), userController.delete);
 
 export default router;

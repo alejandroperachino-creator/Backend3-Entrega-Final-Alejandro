@@ -11,8 +11,23 @@ class OrderService {
     this.userRepository = new UserRepository();
   }
 
-  async getAll(filter) {
-    return this.orderRepository.findAll(filter);
+  async getAll(query = {}) {
+    const pagination = this.buildPagination(query);
+    const filter = {};
+
+    if (query.status) {
+      filter.status = String(query.status).trim().toLowerCase();
+    }
+
+    if (query.priority) {
+      filter.priority = String(query.priority).trim().toLowerCase();
+    }
+
+    if (query.customer) {
+      filter.customer = query.customer;
+    }
+
+    return this.orderRepository.findAll({ filter, pagination });
   }
 
   async getOrderById(id) {
@@ -150,6 +165,19 @@ class OrderService {
     }
 
     return 10;
+  }
+
+  buildPagination(query) {
+    const DEFAULT_LIMIT = 20;
+    const MAX_LIMIT = 100;
+    const page = Number(query.page) > 0 ? Number(query.page) : 1;
+    const requestedLimit = Number(query.limit) > 0 ? Number(query.limit) : DEFAULT_LIMIT;
+    const limit = Math.min(requestedLimit, MAX_LIMIT);
+
+    return {
+      limit,
+      skip: (page - 1) * limit
+    };
   }
 }
 

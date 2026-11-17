@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import MockController from '../controllers/mock.controller.js';
+import { requireRoles } from '../middlewares/auth.js';
+import { USER_ROLES } from '../constants/index.js';
 
 const router = Router();
 const mockController = new MockController();
@@ -462,6 +464,8 @@ router.get('/snapshot', mockController.getSnapshot);
  *   post:
  *     summary: Insertar datos de prueba en base de datos
  *     tags: ["Mocks"]
+ *     security:
+ *       - BearerAuth: []
  *     description: >
  *       Este endpoint no usa body. Recibe parámetros por query:
  *       qty, collection (o type) y seed.
@@ -526,7 +530,7 @@ router.get('/snapshot', mockController.getSnapshot);
  *       500:
  *         $ref: "#/components/responses/MockInternalServerError"
  */
-router.post('/seed', mockController.seed);
+router.post('/seed', ...requireRoles([USER_ROLES.ADMIN]), mockController.seed);
 
 /**
  * @openapi
@@ -534,6 +538,8 @@ router.post('/seed', mockController.seed);
  *   post:
  *     summary: Insertar usuarios de prueba
  *     tags: ["Mocks"]
+ *     security:
+ *       - BearerAuth: []
  *     description: No usa body. Usa query params qty y seed.
  *     parameters:
  *       - in: query
@@ -563,7 +569,7 @@ router.post('/seed', mockController.seed);
  *       500:
  *         $ref: "#/components/responses/MockInternalServerError"
  */
-router.post('/seed/users', mockController.seedUsers);
+router.post('/seed/users', ...requireRoles([USER_ROLES.ADMIN]), mockController.seedUsers);
 
 /**
  * @openapi
@@ -571,6 +577,8 @@ router.post('/seed/users', mockController.seedUsers);
  *   post:
  *     summary: Insertar pedidos de prueba
  *     tags: ["Mocks"]
+ *     security:
+ *       - BearerAuth: []
  *     description: No usa body. Usa query params qty y seed.
  *     parameters:
  *       - in: query
@@ -619,7 +627,7 @@ router.post('/seed/users', mockController.seedUsers);
  *       500:
  *         $ref: "#/components/responses/MockInternalServerError"
  */
-router.post('/seed/orders', mockController.seedOrders);
+router.post('/seed/orders', ...requireRoles([USER_ROLES.ADMIN]), mockController.seedOrders);
 
 /**
  * @openapi
@@ -627,6 +635,8 @@ router.post('/seed/orders', mockController.seedOrders);
  *   post:
  *     summary: Insertar entregas de prueba
  *     tags: ["Mocks"]
+ *     security:
+ *       - BearerAuth: []
  *     description: No usa body. Usa query params qty y seed.
  *     parameters:
  *       - in: query
@@ -691,7 +701,7 @@ router.post('/seed/orders', mockController.seedOrders);
  *       500:
  *         $ref: "#/components/responses/MockInternalServerError"
  */
-router.post('/seed/deliveries', mockController.seedDeliveries);
+router.post('/seed/deliveries', ...requireRoles([USER_ROLES.ADMIN]), mockController.seedDeliveries);
 
 /**
  * @openapi
@@ -699,6 +709,8 @@ router.post('/seed/deliveries', mockController.seedDeliveries);
  *   post:
  *     summary: Ejecutar seed integral (users, orders y deliveries)
  *     tags: ["Mocks"]
+ *     security:
+ *       - BearerAuth: []
  *     description: No usa body. Usa query params qty y seed.
  *     parameters:
  *       - in: query
@@ -728,6 +740,6 @@ router.post('/seed/deliveries', mockController.seedDeliveries);
  *       500:
  *         $ref: "#/components/responses/MockInternalServerError"
  */
-router.post('/seed/all', mockController.seedAll);
+router.post('/seed/all', ...requireRoles([USER_ROLES.ADMIN]), mockController.seedAll);
 
 export default router;

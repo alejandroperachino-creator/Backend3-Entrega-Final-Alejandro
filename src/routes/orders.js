@@ -1,6 +1,14 @@
 import { Router } from 'express';
 import OrderController from '../controllers/order.controller.js';
-import { uploadProof } from '../middlewares/uploadMIddleware.js';
+import { uploadProof } from '../middlewares/uploadFileMiddleware.js';
+import { requireRoles } from '../middlewares/auth.js';
+import { USER_ROLES } from '../constants/index.js';
+import {
+  validateObjectIdParam,
+  requireBodyFields,
+  requireNonEmptyBody,
+  validateOrderItems
+} from '../middlewares/requestValidation.js';
 
 const router = Router();
 const orderController = new OrderController();
@@ -262,6 +270,8 @@ const orderController = new OrderController();
  *   post:
  *     summary: Adjuntar comprobante a una orden
  *     tags: ["Orders"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -292,6 +302,8 @@ const orderController = new OrderController();
  */
 router.post(
   '/:id/proof',
+  validateObjectIdParam('id'),
+  ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE, USER_ROLES.DRIVER]),
   uploadProof.single('proof'),
   orderController.uploadProof
 );
@@ -302,6 +314,43 @@ router.post(
  *   get:
  *     summary: Obtener todas las ordenes
  *     tags: ["Orders"]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Página de resultados
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Límite de resultados por página
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por estado de orden
+ *       - in: query
+ *         name: priority
+ *         required: false
+ *         schema:
+ *           type: string
+ *           enum: [low, normal, high]
+ *         description: Filtrar por prioridad
+ *       - in: query
+ *         name: customer
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por ID de cliente
  *     responses:
  *       200:
  *         $ref: "#/components/responses/OrdersListOk"
@@ -333,7 +382,7 @@ router.get('/', orderController.getAll);
  *       500:
  *         $ref: "#/components/responses/OrderInternalServerError"
  */
-router.get('/:id', orderController.getOrderById);
+router.get('/:id', validateObjectIdParam('id'), orderController.getOrderById);
 
 /**
  * @openapi
@@ -341,6 +390,8 @@ router.get('/:id', orderController.getOrderById);
  *   post:
  *     summary: Crear una nueva orden
  *     tags: ["Orders"]
+ *     security:
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -357,7 +408,13 @@ router.get('/:id', orderController.getOrderById);
  *       500:
  *         $ref: "#/components/responses/OrderInternalServerError"
  */
-router.post('/', orderController.create);
+router.post(
+  '/',
+  ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE, USER_ROLES.USER]),
+  requireBodyFields(['customer', 'deliveryAddress', 'items']),
+  validateOrderItems,
+  orderController.create
+);
 
 /**
  * @openapi
@@ -365,6 +422,8 @@ router.post('/', orderController.create);
  *   put:
  *     summary: Actualizar una orden por ID
  *     tags: ["Orders"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -388,7 +447,13 @@ router.post('/', orderController.create);
  *       500:
  *         $ref: "#/components/responses/OrderInternalServerError"
  */
-router.put('/:id', orderController.update);
+router.put(
+  '/:id',
+  validateObjectIdParam('id'),
+  ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE]),
+  requireNonEmptyBody,
+  orderController.update
+);
 
 /**
  * @openapi
@@ -396,6 +461,8 @@ router.put('/:id', orderController.update);
  *   delete:
  *     summary: Eliminar una orden por ID
  *     tags: ["Orders"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -413,6 +480,6 @@ router.put('/:id', orderController.update);
  *       500:
  *         $ref: "#/components/responses/OrderInternalServerError"
  */
-router.delete('/:id', orderController.delete);
+router.delete('/:id', validateObjectIdParam('id'), ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE]), orderController.delete);
 
 export default router;

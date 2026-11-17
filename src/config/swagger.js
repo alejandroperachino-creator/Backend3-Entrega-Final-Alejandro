@@ -26,6 +26,13 @@ const options = {
             { name: 'Logger', description: 'Herramientas de validación del sistema de logs (no negocio)' }
         ],
         components: {
+            securitySchemes: {
+                BearerAuth: {
+                    type: 'http',
+                    scheme: 'bearer',
+                    bearerFormat: 'JWT'
+                }
+            },
             schemas: {
                 SuccessResponse: {
                     type: 'object',

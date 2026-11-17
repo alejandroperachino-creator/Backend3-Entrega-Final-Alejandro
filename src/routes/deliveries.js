@@ -1,6 +1,13 @@
 import { Router } from 'express';
 import deliveryController from '../controllers/delivery.controller.js';
-import { uploadProof } from '../middlewares/uploadMIddleware.js';
+import { uploadProof } from '../middlewares/uploadFileMiddleware.js';
+import { requireRoles } from '../middlewares/auth.js';
+import { USER_ROLES } from '../constants/index.js';
+import {
+  validateObjectIdParam,
+  requireBodyFields,
+  requireNonEmptyBody
+} from '../middlewares/requestValidation.js';
 
 const router = Router();
 
@@ -252,6 +259,8 @@ const router = Router();
  *   post:
  *     summary: Adjuntar comprobante a una entrega
  *     tags: ["Deliveries"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -282,6 +291,8 @@ const router = Router();
  */
 router.post(
   '/:id/proof',
+  validateObjectIdParam('id'),
+  ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE, USER_ROLES.DRIVER]),
   uploadProof.single('proof'),
   deliveryController.uploadProof
 );
@@ -292,6 +303,42 @@ router.post(
  *   get:
  *     summary: Obtener todas las entregas
  *     tags: ["Deliveries"]
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           default: 1
+ *         description: Página de resultados
+ *       - in: query
+ *         name: limit
+ *         required: false
+ *         schema:
+ *           type: integer
+ *           minimum: 1
+ *           maximum: 100
+ *           default: 20
+ *         description: Límite de resultados por página
+ *       - in: query
+ *         name: status
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por estado de entrega
+ *       - in: query
+ *         name: driver
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por ID de repartidor
+ *       - in: query
+ *         name: order
+ *         required: false
+ *         schema:
+ *           type: string
+ *         description: Filtrar por ID de orden
  *     responses:
  *       200:
  *         $ref: "#/components/responses/DeliveriesListOk"
@@ -323,7 +370,7 @@ router.get('/', deliveryController.getAll);
  *       500:
  *         $ref: "#/components/responses/DeliveryInternalServerError"
  */
-router.get('/:id', deliveryController.getById);
+router.get('/:id', validateObjectIdParam('id'), deliveryController.getById);
 
 /**
  * @openapi
@@ -331,6 +378,8 @@ router.get('/:id', deliveryController.getById);
  *   post:
  *     summary: Crear una nueva entrega
  *     tags: ["Deliveries"]
+ *     security:
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -365,10 +414,17 @@ router.get('/:id', deliveryController.getById);
  *                     id: 19
  *                     code: "USER_NOT_FOUND_ERROR"
  *                     message: "Usuario no encontrado"
+ *       409:
+ *         description: La orden ya tiene una entrega asociada
  *       500:
  *         $ref: "#/components/responses/DeliveryInternalServerError"
  */
-router.post('/', deliveryController.create);
+router.post(
+  '/',
+  ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE]),
+  requireBodyFields(['order']),
+  deliveryController.create
+);
 
 /**
  * @openapi
@@ -376,6 +432,8 @@ router.post('/', deliveryController.create);
  *   put:
  *     summary: Actualizar una entrega por ID
  *     tags: ["Deliveries"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -393,13 +451,49 @@ router.post('/', deliveryController.create);
  *       200:
  *         $ref: "#/components/responses/DeliveryUpdated"
  *       400:
- *         $ref: "#/components/responses/DeliveryInvalidIdError"
+ *         description: Id inválido o regla de negocio inválida
+ *         content:
+ *           application/json:
+ *             examples:
+ *               invalidId:
+ *                 summary: INVALID_ID_ERROR
+ *                 value:
+ *                   success: false
+ *                   status: "fail"
+ *                   error:
+ *                     id: 12
+ *                     code: "INVALID_ID_ERROR"
+ *                     message: "Id inválido"
+ *               missingDriver:
+ *                 summary: BAD_REQUEST_ERROR por falta de repartidor
+ *                 value:
+ *                   success: false
+ *                   status: "fail"
+ *                   error:
+ *                     id: 5
+ *                     code: "BAD_REQUEST_ERROR"
+ *                     message: "No se puede establecer este estado sin un repartidor asignado"
+ *               invalidTransition:
+ *                 summary: BAD_REQUEST_ERROR por transición inválida
+ *                 value:
+ *                   success: false
+ *                   status: "fail"
+ *                   error:
+ *                     id: 5
+ *                     code: "BAD_REQUEST_ERROR"
+ *                     message: "Transición de estado inválida: pending -> delivered"
  *       404:
  *         $ref: "#/components/responses/DeliveryNotFoundError"
  *       500:
  *         $ref: "#/components/responses/DeliveryInternalServerError"
  */
-router.put('/:id', deliveryController.update);
+router.put(
+  '/:id',
+  validateObjectIdParam('id'),
+  ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE]),
+  requireNonEmptyBody,
+  deliveryController.update
+);
 
 /**
  * @openapi
@@ -407,6 +501,8 @@ router.put('/:id', deliveryController.update);
  *   delete:
  *     summary: Eliminar una entrega por ID
  *     tags: ["Deliveries"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -424,6 +520,6 @@ router.put('/:id', deliveryController.update);
  *       500:
  *         $ref: "#/components/responses/DeliveryInternalServerError"
  */
-router.delete('/:id', deliveryController.delete);
+router.delete('/:id', validateObjectIdParam('id'), ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE]), deliveryController.delete);
 
 export default router;

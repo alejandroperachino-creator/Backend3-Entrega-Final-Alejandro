@@ -1,5 +1,12 @@
 import { Router } from 'express';
 import productController from '../controllers/product.controller.js';
+import { requireRoles } from '../middlewares/auth.js';
+import { USER_ROLES } from '../constants/index.js';
+import {
+  validateObjectIdParam,
+  requireBodyFields,
+  requireNonEmptyBody
+} from '../middlewares/requestValidation.js';
 
 const router = Router();
 
@@ -255,7 +262,7 @@ router.get('/', productController.getAll);
  *       500:
  *         $ref: "#/components/responses/ProductInternalServerError"
  */
-router.get('/:id', productController.getById);
+router.get('/:id', validateObjectIdParam('id'), productController.getById);
 
 /**
  * @openapi
@@ -263,6 +270,8 @@ router.get('/:id', productController.getById);
  *   post:
  *     summary: Crear un nuevo producto
  *     tags: ["Products"]
+ *     security:
+ *       - BearerAuth: []
  *     requestBody:
  *       required: true
  *       content:
@@ -277,7 +286,12 @@ router.get('/:id', productController.getById);
  *       500:
  *         $ref: "#/components/responses/ProductInternalServerError"
  */
-router.post('/', productController.create);
+router.post(
+  '/',
+  ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE]),
+  requireBodyFields(['name', 'price']),
+  productController.create
+);
 
 /**
  * @openapi
@@ -285,6 +299,8 @@ router.post('/', productController.create);
  *   put:
  *     summary: Actualizar un producto por ID
  *     tags: ["Products"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -308,7 +324,13 @@ router.post('/', productController.create);
  *       500:
  *         $ref: "#/components/responses/ProductInternalServerError"
  */
-router.put('/:id', productController.update);
+router.put(
+  '/:id',
+  validateObjectIdParam('id'),
+  ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE]),
+  requireNonEmptyBody,
+  productController.update
+);
 
 /**
  * @openapi
@@ -316,6 +338,8 @@ router.put('/:id', productController.update);
  *   delete:
  *     summary: Eliminar un producto por ID
  *     tags: ["Products"]
+ *     security:
+ *       - BearerAuth: []
  *     parameters:
  *       - in: path
  *         name: id
@@ -333,6 +357,6 @@ router.put('/:id', productController.update);
  *       500:
  *         $ref: "#/components/responses/ProductInternalServerError"
  */
-router.delete('/:id', productController.delete);
+router.delete('/:id', validateObjectIdParam('id'), ...requireRoles([USER_ROLES.ADMIN, USER_ROLES.STORE]), productController.delete);
 
 export default router;

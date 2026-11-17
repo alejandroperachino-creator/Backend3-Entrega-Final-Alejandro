@@ -37,7 +37,7 @@ Estructura relevante:
 - `src/middlewares/` middlewares de upload, errores, logging y 404
 - `src/utils/` logger y utilidades de errores
 - `src/config/` configuración de entorno y Swagger
-- `uploads/` carpeta local de almacenamiento documental (ignorada por Git)
+- `UPLOAD_BASE_DIR/` directorio de almacenamiento documental configurable (fuera del repo por default)
 
 ## Requisitos
 
@@ -73,15 +73,27 @@ npm run dev
 - `http://localhost:3003/api/docs`
 - `http://localhost:3003/api-docs`
 
+Si `AUTH_REQUIRED=true`, los endpoints protegidos deben usarse con:
+
+`Authorization: Bearer <token>`
+
 ## Variables de entorno
 
 | Variable | Requerida | Descripción | Default |
 | --- | --- | --- | --- |
 | `PORT` | No | Puerto HTTP de la API | `3003` |
-| `MONGODB_URI` | No | URI de conexión a MongoDB | `mongodb://localhost:27017/shipnow` |
+| `MONGODB_URI` | Sí (development/production) | URI de conexión a MongoDB | `mongodb://localhost:27017/shipnow` |
+| `MONGO_URI_TEST` | Sí (test, o usar `MONGODB_URI_TEST`) | URI de MongoDB para tests | `mongodb://localhost:27017/shipnow_test` |
 | `NODE_ENV` | No | Entorno (`development`, `test`, `production`) | `development` |
-| `LOG_LEVEL` | No | Nivel mínimo de logging | `info` |
-| `JWT_SECRET` | No | Valor disponible en config para usos futuros | `""` |
+| `LOG_LEVEL` | No | Nivel mínimo de logging (`fatal,error,warning,info,http,debug`) | `info` |
+| `REQUEST_BODY_LIMIT` | No | Límite de payload JSON/urlencoded para evitar cuerpos excesivos | `1mb` |
+| `JWT_SECRET` | Condicional | Clave para verificar JWT cuando `AUTH_REQUIRED=true` | `""` |
+| `AUTH_REQUIRED` | No | Exige `Authorization: Bearer <token>` en endpoints protegidos (en `production` no puede deshabilitarse) | `false` (`true` en production por default) |
+| `REQUIRE_REPLICASET_TRANSACTIONS` | No | Obliga soporte de transacciones MongoDB al iniciar | `false` (`true` en production por default) |
+| `INTERNAL_ROUTES_ENABLED` | No | Habilita rutas internas `/api/mocks` y `/api/logger` | `true` fuera de production |
+| `SWAGGER_ENABLED` | No | Habilita `/api/docs` y `/api-docs` | `true` fuera de production |
+| `UPLOAD_BASE_DIR` | No | Directorio base de uploads (recomendado fuera del repo) | `../shipnow-uploads` |
+| `EXTERNAL_SERVICE_BASE_URL` | No | URL base de servicios externos integrados | `""` |
 
 ## Scripts
 
@@ -90,6 +102,64 @@ npm run dev
 | `npm run dev` | Levanta servidor con nodemon |
 | `npm start` | Levanta servidor con node |
 | `npm test` | Ejecuta la suite funcional con Supertest + Mocha |
+
+## Performance y escalabilidad
+
+- Endpoints de listados (`/api/users`, `/api/orders`, `/api/deliveries`) aplican paginación con:
+  - `page` (default `1`)
+  - `limit` (default `20`, máximo `100`)
+- Filtros soportados:
+  - Users: `role`, `email`
+  - Orders: `status`, `priority`, `customer`
+  - Deliveries: `status`, `driver`, `order`
+- Uploads con control de tamaño/tipo/errores en [uploadFileMiddleware.js](./src/middlewares/uploadFileMiddleware.js).
+- Uploads fuera del repo vía `UPLOAD_BASE_DIR`.
+
+## Criterio de rutas internas en producción
+
+- `INTERNAL_ROUTES_ENABLED=false` deshabilita `/api/mocks` y `/api/logger`.
+- `SWAGGER_ENABLED=false` deshabilita `/api/docs` y `/api-docs`.
+- En `production` ambos defaults quedan en `false`.
+
+## Docker
+
+### Archivos
+
+- [Dockerfile](./Dockerfile)
+- [.dockerignore](./.dockerignore)
+
+### Build de imagen
+
+```bash
+docker build -t shipnow-api:latest .
+```
+
+### Ejecutar contenedor
+
+```bash
+docker run --rm -p 3003:3003 --env-file .env shipnow-api:latest
+```
+
+### Verificaciones mínimas
+
+- Health check: `GET http://localhost:3003/api/health`
+- Swagger (si `SWAGGER_ENABLED=true`): `GET http://localhost:3003/api/docs`
+- Endpoint principal: `GET http://localhost:3003/api/users?page=1&limit=20`
+
+### Hardening de contenedor aplicado
+
+- Ejecución con usuario no-root (`node`)
+- `HEALTHCHECK` contra `/api/health`
+- Instalación de dependencias solo de producción (`npm ci --omit=dev`)
+
+### Archivos que no deben subirse al repo/imagen
+
+- Secretos y configuración sensible: `.env`, `.env.*` (excepto ejemplos)
+- Dependencias locales: `node_modules`
+- Artefactos temporales: logs (`*.log`, carpeta `logs`), `coverage`, `tmp`, `temp`
+- Uploads generados (`UPLOAD_BASE_DIR`)
+
+Esto se controla con [.dockerignore](./.dockerignore) y con `.gitignore` del proyecto.
 
 ## Testing
 
@@ -101,21 +171,22 @@ npm test
 
 ### Cobertura de tests
 
-La suite funcional integra **31 tests pasando** con Supertest y Mocha, cubriendo todas las funcionalidades:
+La suite funcional integra **44 tests pasando** con Supertest y Mocha, cubriendo todas las funcionalidades:
 
 | Suite | Tests | Cobertura |
 |-------|-------|-----------|
-| Users API | 9 | CRUD + permission controls + document upload |
-| Orders API | 7 | CRUD + status updates + proof attachment |
-| Uploads | 4 | Success case + missing file + invalid type + entity not found |
+| Users API | 11 | CRUD + permission controls + document upload + password hashing + paginación/filtro |
+| Orders API | 8 | CRUD + status updates + proof attachment + paginación/filtro |
+| Uploads | 6 | Success case + missing file + invalid type + duplicate control + entity not found |
+| Deliveries API | 8 | Estado/lifecycle + sincronización con órdenes + no estado parcial + conflicto/paginación |
 | Mocks API | 6 | Users + Orders + Snapshot + Seed validation |
 | Logger / Swagger / 404 | 5 | Infrastructure + API documentation + error handling |
-| **TOTAL** | **31** | **100% PASSING** ✅ |
+| **TOTAL** | **44** | **100% PASSING** ✅ |
 
 ### Requisitos para testing
 
 - Node.js 18+
-- MongoDB configurado en `MONGODB_URI_TEST` o `MONGODB_URI`
+- MongoDB configurado en `MONGO_URI_TEST` (o `MONGODB_URI_TEST`) para `NODE_ENV=test`
 - Variables cargadas desde `.env.test` o `.env`
 - Multer upload folders writable (auto-created during tests)
 
@@ -126,17 +197,19 @@ La suite funcional integra **31 tests pasando** con Supertest y Mocha, cubriendo
 npm test
 
 # Resultado esperado
-# ✓ 31 passing (604ms)
+# ✓ 44 passing
 ```
 
 ### Tests de carga de archivos (Módulo 7)
 
-Los 4 tests del módulo de uploads validan:
+Los 6 tests del módulo de uploads validan:
 
 1. ✅ **Carga exitosa**: documento válido con metadatos
 2. ✅ **Archivo faltante**: error MISSING_FILE (400)
 3. ✅ **Tipo no permitido**: error INVALID_DOCUMENT_TYPE (400)
-4. ✅ **Entidad no existe**: error DELIVERY_NOT_FOUND_ERROR (404)
+4. ✅ **Duplicado permitido por tipo** cuando el binario es distinto
+5. ✅ **Duplicado binario bloqueado** con RESOURCE_CONFLICT_ERROR (409)
+6. ✅ **Entidad no existe**: error DELIVERY_NOT_FOUND_ERROR (404)
 
 ## Rutas principales
 
@@ -190,7 +263,7 @@ Base: `/api`
 
 #### 2. Carpetas separadas por tipo de documento
 
-**Decisión**: Crear tres carpetas distintas: `uploads/documents`, `uploads/receipts`, `uploads/proofs`.
+**Decisión**: Crear tres carpetas distintas dentro de `UPLOAD_BASE_DIR`: `documents`, `receipts`, `proofs`.
 
 **Razonamiento**:
 - Una carpeta única sería más simple, pero dificulta la auditoría y gestión
@@ -214,7 +287,7 @@ Base: `/api`
 
 #### 4. Validaciones en dos capas: Multer + Service
 
-**Decisión**: Validar en uploadMIddleware + nuevamente en el servicio.
+**Decisión**: Validar en `uploadFileMiddleware` + nuevamente en el servicio.
 
 **Razonamiento**:
 - Si solo validaba en Multer, el archivo se guardaba aunque la entidad no exista (desperdicio de almacenamiento)
@@ -236,10 +309,10 @@ Base: `/api`
 
 ### Configuración de Multer
 
-La configuración se mantiene centralizada en `src/middlewares/uploadMIddleware.js`:
+La configuración se mantiene centralizada en `src/middlewares/uploadFileMiddleware.js`:
 
 - **diskStorage** con nombres controlados y seguros
-- **Carpetas organizadas**: `uploads/{documents, receipts, proofs}`
+- **Carpetas organizadas**: `UPLOAD_BASE_DIR/{documents, receipts, proofs}`
 - **Límites de tamaño**: 5MB por archivo
 - **File filter** con validaciones de tipo MIME y extensión
 
@@ -332,7 +405,7 @@ curl -X POST http://localhost:3003/api/deliveries/507f1f77bcf86cd799439011/proof
 
 ### Almacenamiento y metadatos
 
-- **Archivos**: se guardan en `uploads/` con nombres seguros y único
+- **Archivos**: se guardan en `UPLOAD_BASE_DIR` con nombres seguros y únicos
 - **Metadatos en MongoDB**: solo se persisten referencias y metadatos
   - `originalName` - Nombre original del archivo
   - `fileName` - Nombre seguro generado

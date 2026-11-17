@@ -3,6 +3,7 @@ import path from 'path';
 import multer from 'multer';
 import logger from '../utils/logger.js';
 import { createError, ErrorDictionary } from '../utils/errors.js';
+import config from '../config/env.config.js';
 import {
     UPLOAD_LIMITS,
     ALLOWED_MIME_TYPES,
@@ -12,19 +13,22 @@ import {
 } from '../constants/index.js';
 
 const UPLOAD_PATHS = Object.freeze({
-    documents: path.resolve(process.cwd(), 'uploads', 'documents'),
-    receipts: path.resolve(process.cwd(), 'uploads', 'receipts'),
-    proofs: path.resolve(process.cwd(), 'uploads', 'proofs')
+    documents: path.resolve(config.uploadBaseDir, 'documents'),
+    receipts: path.resolve(config.uploadBaseDir, 'receipts'),
+    proofs: path.resolve(config.uploadBaseDir, 'proofs')
 });
 
-const ensureFolder = (dir) => {
-    fs.mkdirSync(dir, { recursive: true });
-};
-
 const buildStorage = (folder) => {
-    ensureFolder(folder);
     return multer.diskStorage({
-        destination: (_req, _file, cb) => cb(null, folder),
+        destination: (_req, _file, cb) => {
+            fs.mkdir(folder, { recursive: true }, (error) => {
+                if (error) {
+                    return cb(error);
+                }
+
+                return cb(null, folder);
+            });
+        },
         filename: (_req, file, cb) => {
             const extension = path.extname(file.originalname || '').toLowerCase();
             const baseName = (file.originalname || 'upload')

@@ -106,7 +106,7 @@ Resultado: documentación útil para revisión técnica, integración y validaci
 
 Durante la revisión final del proyecto se corrigieron desalineaciones entre configuración, documentación y comportamiento real:
 
-1. Se centralizó la lógica de almacenamiento y validación de archivos en `src/middlewares/uploadMIddleware.js`.
+1. Se centralizó la lógica de almacenamiento y validación de archivos en `src/middlewares/uploadFileMiddleware.js`.
 2. Se conectó el manejo de errores de Multer con el formato general del backend en `src/middlewares/errorHandler.js`.
 3. Se definieron errores específicos para archivos y tipo de documento en `src/utils/errors.js`.
 4. Se incorporó la asociación de metadatos a documentos y comprobantes en los modelos correspondientes.
@@ -261,7 +261,7 @@ Validé que todo cumpliera con los criterios de evaluación:
 ### Reflexiones y decisiones clave tomadas
 
 **Separación de responsabilidades**:
-- `uploadMIddleware.js`: valida archivo (Multer level)
+- `uploadFileMiddleware.js`: valida archivo (Multer level)
 - `userService.js`: valida entidad + asocia (Business logic)
 - `errorHandler.js`: normaliza error (HTTP response)
 - Esta separación hace que sea fácil reutilizar o cambiar
