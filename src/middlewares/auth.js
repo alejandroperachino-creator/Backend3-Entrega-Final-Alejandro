@@ -31,12 +31,10 @@ const extractRoleFromPayload = (payload) => {
   return '';
 };
 
-export const requireAuth = (req, _res, next) => {
-  if (!config.authRequired) {
-    return next();
-  }
+const buildRequireAuth = ({ authRequired, jwtSecret }) => (req, _res, next) => {
+  if (!authRequired) return next();
 
-  if (!config.jwtSecret) {
+  if (!jwtSecret) {
     return next(createError(
       ErrorDictionary.SERVICE_UNAVAILABLE_ERROR.name,
       'Configuración incompleta: JWT_SECRET es obligatorio cuando AUTH_REQUIRED=true',
@@ -57,7 +55,7 @@ export const requireAuth = (req, _res, next) => {
 
   let payload;
   try {
-    payload = jwt.verify(token, config.jwtSecret);
+    payload = jwt.verify(token, jwtSecret);
   } catch (error) {
     return next(error);
   }
@@ -81,12 +79,10 @@ export const requireAuth = (req, _res, next) => {
   return next();
 };
 
-export const requireRoles = (allowedRoles) => [
+const buildRequireRoles = ({ authRequired, requireAuth }) => (allowedRoles) => [
   requireAuth,
   (req, _res, next) => {
-    if (!config.authRequired) {
-      return next();
-    }
+    if (!authRequired) return next();
 
     if (!req.auth?.role || !allowedRoles.includes(req.auth.role)) {
       return next(createError(
@@ -100,3 +96,18 @@ export const requireRoles = (allowedRoles) => [
     return next();
   }
 ];
+
+export const createAuthMiddlewares = ({
+  authRequired = config.authRequired,
+  jwtSecret = config.jwtSecret
+} = {}) => {
+  const requireAuth = buildRequireAuth({ authRequired, jwtSecret });
+  const requireRoles = buildRequireRoles({ authRequired, requireAuth });
+
+  return { requireAuth, requireRoles };
+};
+
+const authMiddlewares = createAuthMiddlewares();
+
+export const requireAuth = authMiddlewares.requireAuth;
+export const requireRoles = authMiddlewares.requireRoles;

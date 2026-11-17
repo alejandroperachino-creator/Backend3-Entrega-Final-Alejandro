@@ -103,6 +103,12 @@ Si `AUTH_REQUIRED=true`, los endpoints protegidos deben usarse con:
 | `npm start` | Levanta servidor con node |
 | `npm test` | Ejecuta la suite funcional con Supertest + Mocha |
 
+## Política de autorización
+
+- Endpoints de escritura (`POST`, `PUT`, `DELETE`) usan middleware de roles y JWT cuando `AUTH_REQUIRED=true`.
+- Endpoints de lectura (`GET`) se mantienen públicos por diseño en esta entrega.
+- En `production`, la app no inicia si `AUTH_REQUIRED=false`.
+
 ## Performance y escalabilidad
 
 - Endpoints de listados (`/api/users`, `/api/orders`, `/api/deliveries`) aplican paginación con:
@@ -171,7 +177,7 @@ npm test
 
 ### Cobertura de tests
 
-La suite funcional integra **44 tests pasando** con Supertest y Mocha, cubriendo todas las funcionalidades:
+La suite funcional integra **51 tests pasando** con Supertest y Mocha, cubriendo todas las funcionalidades:
 
 | Suite | Tests | Cobertura |
 |-------|-------|-----------|
@@ -181,7 +187,8 @@ La suite funcional integra **44 tests pasando** con Supertest y Mocha, cubriendo
 | Deliveries API | 8 | Estado/lifecycle + sincronización con órdenes + no estado parcial + conflicto/paginación |
 | Mocks API | 6 | Users + Orders + Snapshot + Seed validation |
 | Logger / Swagger / 404 | 5 | Infrastructure + API documentation + error handling |
-| **TOTAL** | **44** | **100% PASSING** ✅ |
+| Auth middleware | 7 | JWT requerido, bearer inválido, roles permitidos/denegados |
+| **TOTAL** | **51** | **100% PASSING** ✅ |
 
 ### Requisitos para testing
 
@@ -197,7 +204,7 @@ La suite funcional integra **44 tests pasando** con Supertest y Mocha, cubriendo
 npm test
 
 # Resultado esperado
-# ✓ 44 passing
+# ✓ 51 passing
 ```
 
 ### Tests de carga de archivos (Módulo 7)
