@@ -2,6 +2,11 @@
 
 API de logística para gestión de usuarios, pedidos, entregas y carga documental. El proyecto se organiza por capas, con manejo centralizado de errores, logging y documentación Swagger para facilitar integración y revisión técnica.
 
+## Estado de entrega
+
+Este repo corresponde a la **Pre-entrega Módulo 8 (Performance, escalabilidad y Docker)**.
+La idea en esta etapa fue agarrar lo de módulos anteriores y dejarlo más cerca de un entorno real de producción: mejor control de listados, configuración por entorno y dockerización de la API.
+
 ## Objetivo del proyecto
 
 ShipNow busca ofrecer una API profesional y mantenible para operar procesos logísticos, incorporando además la gestión de archivos asociados a entidades del sistema:

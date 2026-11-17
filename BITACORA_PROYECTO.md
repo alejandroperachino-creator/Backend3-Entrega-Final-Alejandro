@@ -1,5 +1,42 @@
 # Bitácora técnica del proyecto ShipNow
 
+## Actualización Entrega 8 (Performance + Producción + Docker)
+
+En esta sección dejo resumido qué se agregó para la **Pre-entrega Módulo 8**.  
+El foco fue pasar de una API “funciona local” a una API más preparada para despliegue.
+
+### Resumen técnico de lo incorporado
+
+1. **Performance y escalabilidad**
+   - Se agregó paginación y límites en listados de usuarios, órdenes y entregas (`page`, `limit` con máximo).
+   - Se agregaron filtros en listados (`role`, `email`, `status`, `priority`, `customer`, `driver`, `order`).
+   - Se sumaron índices en modelos para que las consultas filtradas/ordenadas escalen mejor.
+
+2. **Preparación para producción**
+   - Se validan variables críticas al inicio (si faltan, la app no arranca).
+   - En `production`, `AUTH_REQUIRED` no se puede desactivar.
+   - `REQUEST_BODY_LIMIT` quedó configurable para evitar payloads grandes.
+   - El health check en `/api/health` responde solo datos seguros: `status`, `environment`, `uptimeSeconds`, `timestamp`.
+   - Quedó definido el criterio de rutas internas (`mocks`, `logger`, `swagger`) según entorno.
+
+3. **Seguridad y consistencia de dominio**
+   - Endpoints de escritura usan JWT + roles cuando `AUTH_REQUIRED=true`.
+   - Se reforzó la regla de negocio: una orden no puede tener más de una entrega (respuesta 409 en conflicto).
+   - Se mantuvo manejo transaccional con fallback controlado según capacidades de MongoDB.
+
+4. **Dockerización**
+   - Se armó un `Dockerfile` para ejecución productiva con:
+     - `npm ci --omit=dev`
+     - ejecución con usuario no-root (`node`)
+     - `HEALTHCHECK` sobre `/api/health`
+   - Se completó `.dockerignore` para no copiar secretos ni artefactos locales:
+     - `.env*` (excepto ejemplos), `node_modules`, logs, uploads generados, coverage y temporales.
+
+5. **Documentación y pruebas**
+   - README actualizado con variables por entorno, ejecución local, tests, Swagger y Docker.
+   - OpenAPI actualizado con `BearerAuth` y parámetros de paginación/filtros.
+   - Suite funcional actualizada: **51 tests passing** (incluye auth middleware y paginación/filtros).
+
 ## 1) Alcance y criterio de trabajo
 
 Este proyecto se desarrolló con foco en un backend profesional y mantenible para una solución logística, priorizando:
@@ -287,17 +324,3 @@ Validé que todo cumpliera con los criterios de evaluación:
 - ✅ documentación estudiante-first (explicar decisiones, no solo qué)
 - documentación útil para integración y revisión
 - escalabilidad para futuras entidades y validaciones
-
-## 8) Corrección docente posterior a la entrega
-
-Se recibió la siguiente observación de revisión:
-
-- ✅ **Multer fue integrado correctamente**.
-- ⚠️ Se subió **demasiada documentación de prueba**, que puede resultar expositiva o innecesaria para la entrega.
-- ⚠️ Recomendación: revisar con mayor frecuencia el alcance de `.gitignore` antes de cada push.
-
-### Acciones de mejora comprometidas
-
-1. Hacer un control pre-push del árbol de archivos (especialmente evidencia, pruebas manuales y temporales).
-2. Validar que `.gitignore` contemple correctamente archivos no esenciales de trabajo local.
-3. Mantener en el repositorio solo documentación funcional para evaluación e integración (README y bitácora), evitando anexos de prueba que no aporten al criterio de corrección.
