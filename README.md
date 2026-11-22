@@ -46,7 +46,7 @@ Estructura relevante:
 
 ## Requisitos
 
-- Node.js 18+
+- Node.js 20+
 - MongoDB local o remoto
 
 ## Instalación y ejecución
@@ -87,18 +87,25 @@ Si `AUTH_REQUIRED=true`, los endpoints protegidos deben usarse con:
 | Variable | Requerida | Descripción | Default |
 | --- | --- | --- | --- |
 | `PORT` | No | Puerto HTTP de la API | `3003` |
-| `MONGODB_URI` | Sí (development/production) | URI de conexión a MongoDB | `mongodb://localhost:27017/shipnow` |
-| `MONGO_URI_TEST` | Sí (test, o usar `MONGODB_URI_TEST`) | URI de MongoDB para tests | `mongodb://localhost:27017/shipnow_test` |
+| `MONGODB_URI` | Sí (development/production) | URI de conexión a MongoDB | Sin default; completar en `.env` |
+| `MONGO_URI_TEST` | Sí (test, o usar `MONGODB_URI_TEST`) | URI de MongoDB para tests | Sin default; completar en `.env.test` |
 | `NODE_ENV` | No | Entorno (`development`, `test`, `production`) | `development` |
 | `LOG_LEVEL` | No | Nivel mínimo de logging (`fatal,error,warning,info,http,debug`) | `info` |
 | `REQUEST_BODY_LIMIT` | No | Límite de payload JSON/urlencoded para evitar cuerpos excesivos | `1mb` |
 | `JWT_SECRET` | Condicional | Clave para verificar JWT cuando `AUTH_REQUIRED=true` | `""` |
 | `AUTH_REQUIRED` | No | Exige `Authorization: Bearer <token>` en endpoints protegidos (en `production` no puede deshabilitarse) | `false` (`true` en production por default) |
-| `REQUIRE_REPLICASET_TRANSACTIONS` | No | Obliga soporte de transacciones MongoDB al iniciar | `false` (`true` en production por default) |
+| `REQUIRE_REPLICASET_TRANSACTIONS` | No | Obliga soporte de transacciones MongoDB al iniciar | `false` en development/test; `true` en production |
 | `INTERNAL_ROUTES_ENABLED` | No | Habilita rutas internas `/api/mocks` y `/api/logger` | `true` fuera de production |
 | `SWAGGER_ENABLED` | No | Habilita `/api/docs` y `/api-docs` | `true` fuera de production |
 | `UPLOAD_BASE_DIR` | No | Directorio base de uploads (recomendado fuera del repo) | `../shipnow-uploads` |
 | `EXTERNAL_SERVICE_BASE_URL` | No | URL base de servicios externos integrados | `""` |
+
+`.env.example` sirve como base para desarrollo y `.env.test.example` para tests.
+En producción, configura estas mismas variables en el gestor de secretos o en
+el entorno de despliegue. La API valida `MONGODB_URI` (o `MONGO_URI_TEST` en
+tests), el puerto, los booleanos y, cuando la autenticación está activa,
+`JWT_SECRET`; si una variable crítica falta o es inválida, el proceso no inicia.
+No reutilices el secreto de prueba en producción.
 
 ## Scripts
 
@@ -113,10 +120,11 @@ Si `AUTH_REQUIRED=true`, los endpoints protegidos deben usarse con:
 - Endpoints de escritura (`POST`, `PUT`, `DELETE`) usan middleware de roles y JWT cuando `AUTH_REQUIRED=true`.
 - Endpoints de lectura (`GET`) se mantienen públicos por diseño en esta entrega.
 - En `production`, la app no inicia si `AUTH_REQUIRED=false`.
+- En producción `AUTH_REQUIRED` queda activo por defecto y exige `JWT_SECRET`.
 
 ## Performance y escalabilidad
 
-- Endpoints de listados (`/api/users`, `/api/orders`, `/api/deliveries`) aplican paginación con:
+- Endpoints de listados (`/api/users`, `/api/orders`, `/api/deliveries` y `/api/products`) aplican paginación con:
   - `page` (default `1`)
   - `limit` (default `20`, máximo `100`)
 - Filtros soportados:
@@ -132,7 +140,7 @@ Si `AUTH_REQUIRED=true`, los endpoints protegidos deben usarse con:
 - `SWAGGER_ENABLED=false` deshabilita `/api/docs` y `/api-docs`.
 - En `production` ambos defaults quedan en `false`.
 
-## Docker
+## Producción y Docker
 
 ### Archivos
 
@@ -142,20 +150,60 @@ Si `AUTH_REQUIRED=true`, los endpoints protegidos deben usarse con:
 ### Build de imagen
 
 ```bash
-docker build -t shipnow-api:latest .
+docker build -t shipnow-api:local .
 ```
 
-### Ejecutar contenedor
+La imagen usa Node.js 22, instala dependencias de producción y ejecuta la API
+como usuario no-root. El puerto interno por defecto es `3003`.
+
+### Ejecutar con una base MongoDB externa
 
 ```bash
-docker run --rm -p 3003:3003 --env-file .env shipnow-api:latest
+docker run --rm -p 3003:3003 --env-file .env.production -v shipnow-uploads:/shipnow-uploads shipnow-api:local
 ```
 
-### Verificaciones mínimas
+`.env.production` debe mantenerse fuera del repositorio y contener como mínimo
+`NODE_ENV=production`, `PORT=3003`, `MONGODB_URI`, `JWT_SECRET` y
+`LOG_LEVEL=info`. `AUTH_REQUIRED` no puede ser `false` en producción. La URI de
+MongoDB debe ser accesible desde el contenedor (no uses `localhost` para una
+base que corre en el host) y soportar transacciones (replica set o mongos), como
+requiere `REQUIRE_REPLICASET_TRANSACTIONS=true` por defecto en producción.
+También se pueden inyectar estas variables desde la plataforma de despliegue
+en lugar de usar un archivo.
+
+Para desarrollo local con MongoDB incluido:
+
+```bash
+docker compose up --build
+```
+
+Compose publica la API en `http://localhost:3003` y conserva la base y los
+uploads en volúmenes. Puedes cambiar el puerto expuesto en el host con
+`API_HOST_PORT` sin modificar el puerto interno de la API.
+
+### Verificaciones
 
 - Health check: `GET http://localhost:3003/api/health`
-- Swagger (si `SWAGGER_ENABLED=true`): `GET http://localhost:3003/api/docs`
+- Swagger: `GET http://localhost:3003/api/docs` (habilitado en development/test;
+  deshabilitado por defecto en production)
 - Endpoint principal: `GET http://localhost:3003/api/users?page=1&limit=20`
+
+### Rutas internas, logs y archivos
+
+- En producción, `/api/mocks` y `/api/logger` quedan deshabilitados por defecto
+  (`INTERNAL_ROUTES_ENABLED=false`); Swagger también queda deshabilitado
+  (`SWAGGER_ENABLED=false`). Se pueden habilitar explícitamente si el despliegue
+  lo requiere y está protegido por controles de red/autorización apropiados.
+- Winston escribe a consola y a archivos rotativos bajo `logs/`. En Docker los
+  archivos del contenedor son efímeros por defecto; consulta la salida con
+  `docker logs` y centraliza los logs para conservarlos en producción.
+- Los uploads se guardan fuera del código en `UPLOAD_BASE_DIR` (en la imagen,
+  `/shipnow-uploads`). El volumen de Compose persiste estos archivos; en
+  producción define respaldo y retención, o usa almacenamiento de objetos. No
+  son almacenamiento ilimitado ni deben conservarse sin una política.
+- No subas `.env`, `.env.production`, `node_modules`, `logs/`, `uploads/`,
+  `coverage/` ni archivos temporales. `.dockerignore` evita incluirlos en la
+  imagen; `.gitignore` excluye los archivos locales del repositorio.
 
 ### Hardening de contenedor aplicado
 
@@ -188,16 +236,17 @@ La suite funcional integra **51 tests pasando** con Supertest y Mocha, cubriendo
 |-------|-------|-----------|
 | Users API | 11 | CRUD + permission controls + document upload + password hashing + paginación/filtro |
 | Orders API | 8 | CRUD + status updates + proof attachment + paginación/filtro |
+| Products API | 1 | Paginación y límite máximo |
 | Uploads | 6 | Success case + missing file + invalid type + duplicate control + entity not found |
 | Deliveries API | 8 | Estado/lifecycle + sincronización con órdenes + no estado parcial + conflicto/paginación |
 | Mocks API | 6 | Users + Orders + Snapshot + Seed validation |
-| Logger / Swagger / 404 | 5 | Infrastructure + API documentation + error handling |
+| Logger / Swagger / health / 404 | 6 | Health check + infraestructura + API documentation + error handling |
 | Auth middleware | 7 | JWT requerido, bearer inválido, roles permitidos/denegados |
-| **TOTAL** | **51** | **100% PASSING** ✅ |
+| **TOTAL** | **53** | **100% PASSING** ✅ |
 
 ### Requisitos para testing
 
-- Node.js 18+
+- Node.js 20+
 - MongoDB configurado en `MONGO_URI_TEST` (o `MONGODB_URI_TEST`) para `NODE_ENV=test`
 - Variables cargadas desde `.env.test` o `.env`
 - Multer upload folders writable (auto-created during tests)
@@ -209,7 +258,7 @@ La suite funcional integra **51 tests pasando** con Supertest y Mocha, cubriendo
 npm test
 
 # Resultado esperado
-# ✓ 51 passing
+# ✓ 53 passing
 ```
 
 ### Tests de carga de archivos (Módulo 7)

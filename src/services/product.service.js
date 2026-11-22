@@ -7,8 +7,21 @@ class ProductService {
     this.productRepository = new ProductRepository();
     }
 
-    async getAllProducts({ includeInactive = false } = {}) {
-    return this.productRepository.findAll({ includeInactive });
+    async getAllProducts(query = {}) {
+    const page = Number(query.page);
+    const requestedLimit = Number(query.limit);
+    const currentPage = Number.isSafeInteger(page) && page > 0 ? page : 1;
+    const limit = Number.isSafeInteger(requestedLimit) && requestedLimit > 0
+        ? Math.min(requestedLimit, 100)
+        : 20;
+
+    return this.productRepository.findAll({
+        includeInactive: query.includeInactive === 'true',
+        pagination: {
+            skip: (currentPage - 1) * limit,
+            limit
+        }
+    });
     }
 
     async getProductById(id) {

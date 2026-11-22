@@ -3,16 +3,19 @@ import path from 'path';
 
 dotenv.config();
 
-const FIXED_PORT = 3003;
+const DEFAULT_PORT = 3003;
 
-const parseBoolean = (value, fallback = false) => {
+const parseBoolean = (value, variableName, fallback = false) => {
+  if (value === undefined || value === null || value === '') return fallback;
   if (typeof value === 'boolean') return value;
-  if (typeof value !== 'string') return fallback;
+  if (typeof value !== 'string') {
+    throw new Error(`${variableName} debe ser true o false.`);
+  }
 
   const normalized = value.trim().toLowerCase();
   if (normalized === 'true') return true;
   if (normalized === 'false') return false;
-  return fallback;
+  throw new Error(`${variableName} debe ser true o false.`);
 };
 
 const parseUrl = (value, variableName) => {
@@ -28,10 +31,10 @@ const parseUrl = (value, variableName) => {
 };
 
 const nodeEnv = process.env.NODE_ENV ?? 'development';
-const portValue = process.env.PORT ?? String(FIXED_PORT);
+const portValue = process.env.PORT ?? String(DEFAULT_PORT);
 const parsedPort = Number(portValue);
-if (Number.isNaN(parsedPort) || parsedPort <= 0) {
-  throw new Error('PORT debe ser un numero positivo.');
+if (!Number.isInteger(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
+  throw new Error('PORT debe ser un número entero entre 1 y 65535.');
 }
 
 const allowedNodeEnvs = ['development', 'test', 'production'];
@@ -56,7 +59,11 @@ if (!mongoUriFromEnv) {
   );
 }
 
-const authRequired = parseBoolean(process.env.AUTH_REQUIRED, nodeEnv === 'production');
+const authRequired = parseBoolean(
+  process.env.AUTH_REQUIRED,
+  'AUTH_REQUIRED',
+  nodeEnv === 'production'
+);
 const jwtSecret = process.env.JWT_SECRET || '';
 if (nodeEnv === 'production' && !authRequired) {
   throw new Error('AUTH_REQUIRED no puede ser false en production.');
@@ -73,17 +80,20 @@ if (!allowedLogLevels.includes(logLevel)) {
 }
 
 const requireReplicaSetTransactions = parseBoolean(
-  process.env.REQUIRE_REPLICASET_TRANSACTIONS ?? 'false',
+  process.env.REQUIRE_REPLICASET_TRANSACTIONS,
+  'REQUIRE_REPLICASET_TRANSACTIONS',
   nodeEnv === 'production'
 );
 
 const internalRoutesEnabled = parseBoolean(
   process.env.INTERNAL_ROUTES_ENABLED,
+  'INTERNAL_ROUTES_ENABLED',
   nodeEnv !== 'production'
 );
 
 const swaggerEnabled = parseBoolean(
   process.env.SWAGGER_ENABLED,
+  'SWAGGER_ENABLED',
   nodeEnv !== 'production'
 );
 

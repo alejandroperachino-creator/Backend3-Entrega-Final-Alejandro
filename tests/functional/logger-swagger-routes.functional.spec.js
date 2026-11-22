@@ -3,6 +3,18 @@ import request from 'supertest';
 import app from '../../src/app.js';
 
 describe('Functional - Logger, Swagger y rutas inexistentes', () => {
+  it('GET /api/health expone estado y métricas básicas sin datos sensibles', async () => {
+    const response = await request(app).get('/api/health');
+
+    expect(response.status).to.equal(200);
+    expect(response.body).to.include.keys('status', 'environment', 'uptimeSeconds', 'timestamp');
+    expect(response.body.status).to.equal('ok');
+    expect(response.body.uptimeSeconds).to.be.a('number');
+    expect(Number.isNaN(Date.parse(response.body.timestamp))).to.equal(false);
+    expect(response.body).to.not.have.property('mongoUri');
+    expect(response.body).to.not.have.property('jwtSecret');
+  });
+
   it('GET /api/logger responde OK con estructura esperada', async () => {
     const response = await request(app).get('/api/logger');
 

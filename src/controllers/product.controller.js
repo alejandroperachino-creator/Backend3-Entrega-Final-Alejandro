@@ -13,8 +13,7 @@ class ProductController {
 
   async getAll(req, res, next) {
     try {
-      const includeInactive = req.query.includeInactive === 'true';
-      const products = await this.productService.getAllProducts({ includeInactive });
+      const products = await this.productService.getAllProducts(req.query || {});
       return res.status(200).json({
         status: 'success',
         message: 'Productos obtenidos exitosamente',

@@ -2,7 +2,7 @@ import Product from '../models/product.model.js';
 import { PRODUCT_STATUS } from '../constants/index.js';
 
 class ProductRepository {
-    async findAll({ includeInactive = false } = {}) {
+    async findAll({ includeInactive = false, pagination = {} } = {}) {
     const filter = includeInactive
         ? {}
         : {
@@ -12,7 +12,9 @@ class ProductRepository {
 
     return Product.find(filter)
         .select('-__v')
-        .sort({ createdAt: -1 });
+        .sort({ createdAt: -1 })
+        .skip(Number(pagination.skip) || 0)
+        .limit(Number(pagination.limit) || 20);
     }
 
     async findById(id) {

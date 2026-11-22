@@ -1,0 +1,37 @@
+services:
+  mongo:
+    image: mongo:7.0
+    restart: unless-stopped
+    volumes:
+      - mongo-data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  api:
+    build:
+      context: .
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      NODE_ENV: development
+      PORT: 3003
+      MONGODB_URI: mongodb://mongo:27017/shipnow
+      AUTH_REQUIRED: "false"
+      REQUIRE_REPLICASET_TRANSACTIONS: "false"
+      INTERNAL_ROUTES_ENABLED: "true"
+      SWAGGER_ENABLED: "true"
+      UPLOAD_BASE_DIR: /shipnow-uploads
+    ports:
+      - "${API_HOST_PORT:-3003}:3003"
+    volumes:
+      - uploads-data:/shipnow-uploads
+
+volumes:
+  mongo-data:
+  uploads-data:
