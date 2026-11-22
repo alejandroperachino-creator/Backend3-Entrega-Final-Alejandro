@@ -1,23 +1,22 @@
 # Bitácora técnica del proyecto ShipNow
 
-## Actualización Entrega 8 (Performance + Producción + Docker)
+## Actualización Entrega 8: Rendimiento, producción y Docker
 
-En esta sección dejo resumido qué se agregó para la **Pre-entrega Módulo 8**.  
-El foco fue pasar de una API “funciona local” a una API más preparada para despliegue.
+En esta pre-entrega revisé el comportamiento de la API y agregué medidas básicas para ejecutarla de forma más controlada. Las decisiones se enfocaron en limitar respuestas, validar la configuración al inicio y documentar una ejecución reproducible con Docker.
 
 ### Resumen técnico de lo incorporado
 
 1. **Performance y escalabilidad**
-   - Se agregó paginación y límites en listados de usuarios, órdenes y entregas (`page`, `limit` con máximo).
+   - Se agregó paginación y límites en listados de usuarios, órdenes, entregas y productos (`page`, `limit` con máximo de 100).
    - Se agregaron filtros en listados (`role`, `email`, `status`, `priority`, `customer`, `driver`, `order`).
-   - Se sumaron índices en modelos para que las consultas filtradas/ordenadas escalen mejor.
+   - Los productos muestran disponibles con stock por defecto; `includeInactive=true` amplía el listado.
 
 2. **Preparación para producción**
-   - Se validan variables críticas al inicio (si faltan, la app no arranca).
-   - En `production`, `AUTH_REQUIRED` no se puede desactivar.
-   - `REQUEST_BODY_LIMIT` quedó configurable para evitar payloads grandes.
+   - Se validan variables críticas al inicio, incluidos puerto, URI de MongoDB y valores booleanos.
+   - En `production`, la autenticación queda activa y requiere `JWT_SECRET`.
+   - `REQUEST_BODY_LIMIT` es configurable para evitar cuerpos de request excesivos.
    - El health check en `/api/health` responde solo datos seguros: `status`, `environment`, `uptimeSeconds`, `timestamp`.
-   - Quedó definido el criterio de rutas internas (`mocks`, `logger`, `swagger`) según entorno.
+   - En producción, mocks, logger test y Swagger quedan deshabilitados por defecto.
 
 3. **Seguridad y consistencia de dominio**
    - Endpoints de escritura usan JWT + roles cuando `AUTH_REQUIRED=true`.
@@ -25,17 +24,19 @@ El foco fue pasar de una API “funciona local” a una API más preparada para 
    - Se mantuvo manejo transaccional con fallback controlado según capacidades de MongoDB.
 
 4. **Dockerización**
-   - Se armó un `Dockerfile` para ejecución productiva con:
+   - Se incorporó un `Dockerfile` con:
      - `npm ci --omit=dev`
      - ejecución con usuario no-root (`node`)
      - `HEALTHCHECK` sobre `/api/health`
+   - `compose.yaml` permite levantar la API y MongoDB localmente; los datos se guardan en volúmenes.
    - Se completó `.dockerignore` para no copiar secretos ni artefactos locales:
-     - `.env*` (excepto ejemplos), `node_modules`, logs, uploads generados, coverage y temporales.
+     - `.env*`, `node_modules`, logs, uploads generados, coverage y temporales.
 
 5. **Documentación y pruebas**
    - README actualizado con variables por entorno, ejecución local, tests, Swagger y Docker.
    - OpenAPI actualizado con `BearerAuth` y parámetros de paginación/filtros.
-   - Suite funcional actualizada: **51 tests passing** (incluye auth middleware y paginación/filtros).
+   - Suite funcional verificada: **53 pruebas aprobadas**.
+   - La imagen se construyó y se comprobó en ejecución: health check, Swagger y listado principal respondieron correctamente.
 
 ## 1) Alcance y criterio de trabajo
 
@@ -126,18 +127,18 @@ Resultado: documentación útil para revisión técnica, integración y validaci
    - ✅ **Elegí timestamp + aleatorio**: único, seguro, imposible de adivinar. El original se guarda en metadatos
 
 4. **Validaciones: una capa vs dos capas**
-   - ❌ Solo Multer: archivo se guarda aunque entidad no exista (basura en disco)
+   - Multer escribe el archivo en disco antes de que el servicio compruebe que la entidad existe.
    - ✅ **Elegí dos capas**:
      - Multer valida tipo/tamaño/extensión rápidamente
-     - Service valida que entidad existe antes de asociar
-     - Si falla, archivo se limpia automáticamente
+     - Service valida que la entidad exista antes de asociar
+     - Si la asociación falla, el archivo no se elimina automáticamente; queda como mejora pendiente definir una limpieza de archivos huérfanos
 
 5. **Qué guardar en BD: solo ruta vs metadatos completos**
    - ❌ Solo ruta: no puedo hacer queries por tipo de documento o tamaño
    - ✅ **Elegí metadatos completos**: `originalName`, `fileName`, `path`, `mimetype`, `size`, `type`, `uploadedAt`
    - Permite auditoría, queries de negocio, soft-deletes
 
-**Resultado**: Gestión de archivos robusta, auditable, sin acoplamiento entre persistencia de datos y almacenamiento de archivos.
+**Resultado**: Los archivos y sus metadatos se almacenan por separado y las cargas tienen límites y tipos permitidos. La aplicación no limpia automáticamente los archivos huérfanos cuando falla una asociación; esa limitación se registra como deuda técnica.
 
 ## 3) Ajustes de calidad realizados
 
@@ -149,6 +150,8 @@ Durante la revisión final del proyecto se corrigieron desalineaciones entre con
 4. Se incorporó la asociación de metadatos a documentos y comprobantes en los modelos correspondientes.
 5. Se ignoró la carpeta `uploads/` en Git para evitar subir contenido generado en runtime.
 6. Se ajustó la documentación para reflejar el comportamiento real del sistema y ejemplos de uso de endpoints de archivos.
+7. Se validó que la configuración de producción desactive por defecto las rutas internas y Swagger, y exija autenticación.
+8. Se incorporó un health check y se probaron endpoints principales dentro del contenedor.
 
 ## 4) Validación realizada
 
@@ -161,97 +164,70 @@ Durante la revisión del módulo se validó el comportamiento real del sistema c
 - entidad no encontrada
 - comprobante asociado a orden/entrega
 
-También se comprobó que la API siga respondiendo con el formato estándar del proyecto y que los eventos se registren correctamente en el logger.
+También se comprobó que la API mantenga el formato estándar de errores, que el health check no exponga secretos y que el contenedor responda en health, Swagger y un endpoint principal.
 
 ## 5) Testing y validación
 
-### Cobertura de tests
+La suite funcional actual cuenta con **53 pruebas aprobadas**. Se usan Mocha, Chai y Supertest para probar las rutas sin iniciar un servidor HTTP externo; las pruebas funcionales se conectan a una base MongoDB de prueba.
 
-El proyecto cuenta con una suite funcional completa de **31 tests pasando**. Decisión de arquitectura: usar Mocha + Chai + Supertest porque:
+| Módulo | Tests | Casos principales |
+|---|---:|---|
+| Módulo | Pruebas | Casos principales |
+|---|---:|---|
+| Usuarios | 11 | CRUD, permisos, hash de contraseña, filtros y paginación |
+| Pedidos | 8 | CRUD, estados, comprobantes, filtros y paginación |
+| Productos | 1 | Paginación y límite máximo |
+| Cargas de archivos | 6 | Carga válida, límites, tipos, duplicados y entidad inexistente |
+| Entregas | 8 | Estados, sincronización con pedidos, conflictos y paginación |
+| Mocks | 6 | Generación, seed y snapshots |
+| Logger / Swagger / health / 404 | 6 | Rutas técnicas, documentación, health check y errores |
+| Middleware de autenticación | 7 | JWT, roles y respuestas de autorización |
+| **Total** | **53** | **Suite funcional** |
 
-- ✅ No requieren servidor externo (tests in-process)
-- ✅ Integración directa con MongoDB de prueba
-- ✅ Sintaxis clara y legible
-- ✅ Setup mínimo, resultado máximo
+Al comenzar el Módulo 7, los tests de uploads cubrían los casos principales de carga correcta, archivo faltante, tipo inválido y entidad inexistente. En la Entrega 8 la cobertura se amplió para incluir restricciones adicionales y duplicados.
 
-#### Suite de tests (tests/functional/)
-
-| Módulo | Tests | Casos |
-|--------|-------|-------|
-| Users | 9 | CRUD, permission controls, document upload |
-| Orders | 7 | CRUD, status updates, proof handling |
-| **Uploads (Módulo 7)** | **4** | **File validation, error scenarios, entity checks** |
-| Mocks | 6 | Data generation, seeding, snapshots |
-| Logger / Swagger / 404 | 5 | Infrastructure, documentation, error handling |
-
-#### Tests de Módulo 7 (Uploads) - Decisiones de cobertura
-
-Decidí hacer 4 tests en lugar de uno solo porque:
-
-1. **Un test por camino feliz**: `POST /api/users/:id/documents` con documento válido
-   - Status: 200 OK
-   - Documento asociado a usuario
-   - Metadatos guardados correctamente
-   - **Por qué**: necesito confirmar que end-to-end funciona
-
-2. **Un test por error crítico**: archivo faltante
-   - Status: 400 Bad Request
-   - Error code: `MISSING_FILE`
-   - **Por qué**: es el error más frecuente en producción
-
-3. **Un test por validación de negocio**: tipo de documento inválido
-   - Status: 400 Bad Request
-   - Error code: `INVALID_DOCUMENT_TYPE`
-   - **Por qué**: sin esto, la API acepta valores que luego no puede procesar
-
-
-4. ✅ **Entidad no existe**: `POST /api/deliveries/:id/proof` con ID inexistente
-   - Status: 404 Not Found
-   - Error code: `DELIVERY_NOT_FOUND_ERROR`
-   - Verificación previa a vinculación
-
-### Ejecución de tests
+### Ejecución
 
 ```bash
 npm test
-# Resultado: ✓ 31 passing (604ms)
 ```
 
 Requisitos:
-- Node.js 18+
-- MongoDB activo y accesible
-- Variables de entorno en `.env.test` o `.env`
+- Node.js 20+
+- MongoDB activo y accesible mediante `MONGO_URI_TEST` (o `MONGODB_URI_TEST`)
+- Variables definidas en `.env.test` o en el entorno
+
+En la última validación de la entrega se obtuvieron **53 pruebas aprobadas**. También se construyó la imagen Docker y se comprobaron el health check, Swagger y el listado de usuarios.
 
 ## 6) Riesgos, deuda técnica y próximos pasos
 
-Después de terminar el Módulo 7, reconozco las siguientes oportunidades de mejora:
+Luego de la Entrega 8, identifico las siguientes limitaciones y mejoras:
 
 **Decisiones que hice con conocimiento de riesgos**:
 
-1. **Archivos en disco, no en CDN**
-   - Riesgo: si el servidor se caerá, se pierden archivos
-   - Mitigación actual: .gitignore para no saturar repositorio
-   - Mejora futura: consideraría S3/Cloudinary cuando sea producción real
+1. **Archivos locales y archivos huérfanos**
+   - Riesgo: el almacenamiento local puede perderse si el volumen no tiene respaldo. Si falla la asociación después de la carga, puede quedar un archivo sin referencia.
+   - Mitigación actual: `UPLOAD_BASE_DIR` queda fuera del repositorio y Compose usa un volumen.
+   - Mejora pendiente: definir retención, limpieza automática y respaldo; para producción real, evaluar almacenamiento de objetos.
 
-2. **Sin autenticación/autorización**
-   - Riesgo: cualquiera puede subir a cualquier entidad
-   - Decisión: fuera del scope del Módulo 7
-   - Mejora futura: validar user token antes de aceptar upload
+2. **Lecturas públicas**
+   - Riesgo: los endpoints GET no requieren autenticación en esta entrega.
+   - Decisión: se conserva el comportamiento existente para el alcance educativo; en producción real debe revisarse la autorización por recurso.
 
-3. **Sin antivirus/quarantine**
-   - Riesgo: archivos maliciosos podrían colarse
-   - Decisión: confiar en MIME type + extensión es suficiente para educativo
-   - Mejora futura: integración con ClamAV o similar en producción
+3. **Validación del contenido de archivos**
+   - Riesgo: MIME type y extensión no garantizan por sí solos que el contenido sea seguro.
+   - Mejora futura: inspección del contenido y análisis antivirus antes de asociar el archivo.
 
-4. **Compresión de archivos**
-   - Razón actual: no se implementó (K.I.S.S.)
-   - Mejora futura: comprimir PDFs/imágenes para ahorrar disco
+4. **Retención y observabilidad**
+   - Los logs rotativos locales no reemplazan un sistema centralizado.
+   - Mejora futura: centralizar logs y configurar alertas en el entorno de despliegue.
 
-5. **Soft-deletes vs borrado físico**
-   - Decisión: borrar archivo + metadata inmediatamente
-   - Mejora futura: marcar como inactivo, borrar después de N días (auditoría)
+5. **MongoDB con transacciones**
+   - En producción se requiere replica set o mongos por defecto.
+   - Una instancia standalone no iniciará con la configuración productiva.
+   - Compose usa MongoDB standalone solo para desarrollo local y desactiva el requisito de transacciones.
 
-## 7) Cierre y estado final
+## 7) Cierre del Módulo 7 (registro histórico)
 
 El proyecto quedó en un estado consistente entre implementación, documentación y criterio profesional. Todas las decisiones fueron documentadas para que se entienda por qué se eligió cada camino.
 
@@ -259,20 +235,20 @@ El proyecto quedó en un estado consistente entre implementación, documentació
 
 Validé que todo cumpliera con los criterios de evaluación:
 
-- ✅ **Multer configurado correctamente** (20/20)
+- ✅ **Multer configurado correctamente**
   - diskStorage con nombres únicos (timestamp + random)
   - Carpetas organizadas por tipo: documents, receipts, proofs
   - Límites de tamaño: 5MB por archivo
   - MIME types y extensiones validados en uploadMIddleware
 
-- ✅ **Archivos asociados a entidades** (20/20)
+- ✅ **Archivos asociados a entidades**
   - Users: `documents` array con metadatos
   - Orders: `proofs` array con metadatos
-  - Deliveries: `proof` field con metadatos
+  - Deliveries: comprobantes asociados con sus metadatos
   - Metadata guardado en MongoDB, archivos en servidor
-  - Recuperable a través de API
+  - La API devuelve referencias y metadatos; no implementa descarga del contenido binario
 
-- ✅ **Validaciones y errores** (20/20)
+- ✅ **Validaciones y errores**
   - Archivo requerido → MISSING_FILE
   - Tipo MIME inválido → INVALID_FILE_TYPE
   - Extensión no permitida → rechazado en Multer
@@ -281,19 +257,13 @@ Validé que todo cumpliera con los criterios de evaluación:
   - Entidad no existe → 404 con código específico
   - Formato centralizado en ErrorDictionary
 
-- ✅ **Documentación y logging** (20/20)
+- ✅ **Documentación y logging**
   - Endpoints en Swagger: marcados como multipart/form-data
   - README.md: sección "Carga de archivos" con ejemplos curl
   - BITACORA.md: decisiones y criterios documentados
   - Winston logger: eventos registrados (upload, validación, error)
   - Archivos rotados diariamente
 
-- ✅ **Testing y entrega** (20/20)
-  - 31 tests totales, 31 pasando (100%)
-  - 4 tests específicos para uploads (success + 3 errors)
-  - Repository limpio: sin node_modules, sin uploads/, sin archivos de prueba
-  - README explica: endpoints, tipos y tamaños, cómo probar
-  - BITACORA documenta: decisiones, riesgos, próximos pasos
 
 ### Reflexiones y decisiones clave tomadas
 
@@ -302,18 +272,6 @@ Validé que todo cumpliera con los criterios de evaluación:
 - `userService.js`: valida entidad + asocia (Business logic)
 - `errorHandler.js`: normaliza error (HTTP response)
 - Esta separación hace que sea fácil reutilizar o cambiar
-
-**Por qué no hice X**:
-- No usé Storage buckets: overkill para educativo
-- No implementé auth: no era requisito del Módulo 7
-- No comprimí archivos: K.I.S.S., pueden hacer futuros
-- No usé soft-deletes: borrado inmediato es más simple
-
-**Por qué sí hice Y**:
-- Dos capas de validación: evita basura en disco
-- Metadatos completos: permite auditoría y negocio queries
-- Nombres únicos (timestamp + random): seguridad + no colisiones
-- Carpetas por tipo: escalable y facilita auditoría
 
 ### Prioridades mantenidas
 
@@ -324,3 +282,22 @@ Validé que todo cumpliera con los criterios de evaluación:
 - ✅ documentación estudiante-first (explicar decisiones, no solo qué)
 - documentación útil para integración y revisión
 - escalabilidad para futuras entidades y validaciones
+
+## 8) Cierre de la Entrega 8
+
+La API conserva sus endpoints principales y suma límites explícitos para listados y cargas, configuración validada al inicio, un health check y una imagen Docker ejecutada como usuario no-root. La configuración de producción exige `JWT_SECRET` y desactiva por defecto mocks, logger test y Swagger. El puerto interno del contenedor es `3003`.
+
+### Checklist de entrega
+
+- [x] Listados de usuarios, pedidos, entregas y productos con máximo de 100 resultados por página.
+- [x] Uploads limitados a 5 MB y a PDF, PNG o JPEG; los errores de carga tienen respuestas controladas.
+- [x] Variables críticas validadas al iniciar y separadas mediante `.env.example`, `.env.test.example` y variables del entorno productivo.
+- [x] Health check en `/api/health` sin URI de base de datos ni secretos.
+- [x] `Dockerfile`, `.dockerignore` y `compose.yaml` disponibles.
+- [x] README con ejecución local, pruebas, Swagger, variables y ejecución del contenedor.
+- [x] `npm test`: 53 pruebas funcionales aprobadas.
+- [x] Prueba de contenedor: health, Swagger y listado principal disponibles.
+
+### Aprendizaje
+
+En esta etapa comprobé que preparar una API para despliegue no consiste solo en crear una imagen. También hay que limitar las consultas y los archivos, separar los valores por entorno, evitar copiar secretos al contexto Docker y documentar qué datos persisten. Como siguiente mejora técnica queda automatizar la limpieza de uploads huérfanos y definir formalmente su retención.

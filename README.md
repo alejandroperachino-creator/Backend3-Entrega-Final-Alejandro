@@ -5,7 +5,7 @@ API de logística para gestión de usuarios, pedidos, entregas y carga documenta
 ## Estado de entrega
 
 Este repo corresponde a la **Pre-entrega Módulo 8 (Performance, escalabilidad y Docker)**.
-La idea en esta etapa fue agarrar lo de módulos anteriores y dejarlo más cerca de un entorno real de producción: mejor control de listados, configuración por entorno y dockerización de la API.
+En esta etapa revisé los módulos anteriores y preparé la API para ejecutarse de forma más controlada: limité listados y cargas, validé la configuración por entorno y agregué una opción de ejecución con Docker.
 
 ## Objetivo del proyecto
 
@@ -131,7 +131,8 @@ No reutilices el secreto de prueba en producción.
   - Users: `role`, `email`
   - Orders: `status`, `priority`, `customer`
   - Deliveries: `status`, `driver`, `order`
-- Uploads con control de tamaño/tipo/errores en [uploadFileMiddleware.js](./src/middlewares/uploadFileMiddleware.js).
+- Products: productos disponibles con stock; `includeInactive=true` amplía el listado.
+- Los uploads aceptan PDF, PNG y JPEG, con un máximo de 5 MB por archivo y errores normalizados en [uploadFileMiddleware.js](./src/middlewares/uploadFileMiddleware.js).
 - Uploads fuera del repo vía `UPLOAD_BASE_DIR`.
 
 ## Criterio de rutas internas en producción
@@ -211,14 +212,13 @@ uploads en volúmenes. Puedes cambiar el puerto expuesto en el host con
 - `HEALTHCHECK` contra `/api/health`
 - Instalación de dependencias solo de producción (`npm ci --omit=dev`)
 
-### Archivos que no deben subirse al repo/imagen
+### Archivos que no deben versionarse ni copiarse a la imagen
 
-- Secretos y configuración sensible: `.env`, `.env.*` (excepto ejemplos)
-- Dependencias locales: `node_modules`
-- Artefactos temporales: logs (`*.log`, carpeta `logs`), `coverage`, `tmp`, `temp`
-- Uploads generados (`UPLOAD_BASE_DIR`)
+- **Repositorio Git**: no subas `.env` ni archivos `.env.*` con secretos. Los ejemplos (`.env.example`, `.env.test.example`) sí se pueden versionar.
+- **Contexto Docker**: `.dockerignore` excluye todos los `.env*`, también los ejemplos, porque no son necesarios para construir la imagen. Inyecta la configuración al ejecutar el contenedor.
+- No subas dependencias locales (`node_modules`), logs, uploads generados, coverage ni archivos temporales.
 
-Esto se controla con [.dockerignore](./.dockerignore) y con `.gitignore` del proyecto.
+Estas reglas se aplican mediante [.gitignore](./.gitignore) y [.dockerignore](./.dockerignore).
 
 ## Testing
 
@@ -230,19 +230,19 @@ npm test
 
 ### Cobertura de tests
 
-La suite funcional integra **51 tests pasando** con Supertest y Mocha, cubriendo todas las funcionalidades:
+La suite funcional integra **53 pruebas aprobadas** con Supertest y Mocha, cubriendo las rutas principales, la autenticación, la paginación, los uploads y el health check:
 
 | Suite | Tests | Cobertura |
 |-------|-------|-----------|
-| Users API | 11 | CRUD + permission controls + document upload + password hashing + paginación/filtro |
-| Orders API | 8 | CRUD + status updates + proof attachment + paginación/filtro |
-| Products API | 1 | Paginación y límite máximo |
-| Uploads | 6 | Success case + missing file + invalid type + duplicate control + entity not found |
-| Deliveries API | 8 | Estado/lifecycle + sincronización con órdenes + no estado parcial + conflicto/paginación |
-| Mocks API | 6 | Users + Orders + Snapshot + Seed validation |
-| Logger / Swagger / health / 404 | 6 | Health check + infraestructura + API documentation + error handling |
-| Auth middleware | 7 | JWT requerido, bearer inválido, roles permitidos/denegados |
-| **TOTAL** | **53** | **100% PASSING** ✅ |
+| API de usuarios | 11 | CRUD, permisos, carga de documentos, hash de contraseña, filtros y paginación |
+| API de pedidos | 8 | CRUD, estados, comprobantes, filtros y paginación |
+| API de productos | 1 | Paginación y límite máximo |
+| Cargas de archivos | 6 | Carga válida, archivo faltante, tipos, duplicados y entidad inexistente |
+| API de entregas | 8 | Estados, sincronización con pedidos, conflictos y paginación |
+| API de mocks | 6 | Generación de usuarios/pedidos, snapshots y validación de seed |
+| Logger / Swagger / health / 404 | 6 | Rutas técnicas, documentación, health check y errores |
+| Middleware de autenticación | 7 | JWT, roles permitidos y denegados |
+| **TOTAL** | **53** | **Todas aprobadas** ✅ |
 
 ### Requisitos para testing
 
@@ -258,12 +258,12 @@ La suite funcional integra **51 tests pasando** con Supertest y Mocha, cubriendo
 npm test
 
 # Resultado esperado
-# ✓ 53 passing
+# ✓ 53 pruebas aprobadas
 ```
 
 ### Tests de carga de archivos (Módulo 7)
 
-Los 6 tests del módulo de uploads validan:
+Las 6 pruebas de carga de archivos validan:
 
 1. ✅ **Carga exitosa**: documento válido con metadatos
 2. ✅ **Archivo faltante**: error MISSING_FILE (400)
@@ -351,12 +351,13 @@ Base: `/api`
 **Decisión**: Validar en `uploadFileMiddleware` + nuevamente en el servicio.
 
 **Razonamiento**:
-- Si solo validaba en Multer, el archivo se guardaba aunque la entidad no exista (desperdicio de almacenamiento)
+- Multer guarda el archivo en disco antes de que el servicio compruebe que la entidad existe.
 - **Elegí dos capas** para:
   - Multer rechaza archivos inválidos (tipo, extensión, tamaño) rápidamente
-  - Service valida si el usuario/pedido/entrega existe antes de guardar
+  - Service valida si el usuario/pedido/entrega existe antes de asociar el archivo
   - Respuesta de error consistente con el ErrorDictionary del proyecto
-  - Si falla, el archivo se elimina automáticamente (no queda basura)
+
+**Límite actual**: si la asociación falla después de que Multer escribió el archivo, la aplicación no lo elimina automáticamente. Por eso los uploads se guardan fuera del repositorio y deben tener una política de retención y limpieza. Para producción se recomienda almacenamiento externo o una tarea de mantenimiento controlada.
 
 #### 5. Metadatos en MongoDB en lugar de solo archivos
 
@@ -494,7 +495,7 @@ Los documentos se pueden recuperar junto con la entidad:
 GET /api/users/:id
 ```
 
-La respuesta incluye el array `documents` con todos los archivos asociados y sus metadatos.
+La respuesta incluye el array `documents` con los archivos asociados y sus metadatos. Esta entrega no implementa una ruta de descarga del contenido binario.
 
 
 
