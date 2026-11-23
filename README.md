@@ -1,20 +1,21 @@
 # ShipNow API (Backend III)
 
-API de logística para gestión de usuarios, pedidos, entregas y carga documental. El proyecto se organiza por capas, con manejo centralizado de errores, logging y documentación Swagger para facilitar integración y revisión técnica.
+ShipNow es una API para gestionar usuarios, pedidos y entregas, y asociarles documentos y comprobantes. La fui armando por módulos durante el curso; esta versión también incluye pruebas, logs, Swagger y Docker.
 
 ## Estado de entrega
 
-Este repo corresponde a la **Pre-entrega Módulo 8 (Performance, escalabilidad y Docker)**.
-En esta etapa revisé los módulos anteriores y preparé la API para ejecutarse de forma más controlada: limité listados y cargas, validé la configuración por entorno y agregué una opción de ejecución con Docker.
+Esta es la versión final que preparé para la entrega. Acá están reunidas las
+funcionalidades trabajadas durante el curso y las instrucciones para ejecutar
+y probar la API.
 
 ## Objetivo del proyecto
 
-ShipNow busca ofrecer una API profesional y mantenible para operar procesos logísticos, incorporando además la gestión de archivos asociados a entidades del sistema:
+La API permite trabajar con:
 
 - usuarios con documentos personales
 - comprobantes asociados a órdenes y entregas
 - validación de tipo y tamaño de archivo
-- almacenamiento seguro en carpetas del servidor
+- archivos guardados en una carpeta configurable fuera del repositorio
 - registro de metadatos únicamente en base de datos
 
 ## Stack técnico
@@ -23,7 +24,7 @@ ShipNow busca ofrecer una API profesional y mantenible para operar procesos log�
 - MongoDB + Mongoose
 - Multer para carga de archivos multipart/form-data
 - Swagger (`swagger-jsdoc`, `swagger-ui-express`)
-- Winston + `winston-daily-rotate-file`
+- Winston para logs estructurados
 - Faker para generación de datos mock
 
 ## Arquitectura
@@ -84,28 +85,32 @@ Si `AUTH_REQUIRED=true`, los endpoints protegidos deben usarse con:
 
 ## Variables de entorno
 
-| Variable | Requerida | Descripción | Default |
+| Variable | Requerida | Descripción | Valor por defecto |
 | --- | --- | --- | --- |
 | `PORT` | No | Puerto HTTP de la API | `3003` |
-| `MONGODB_URI` | Sí (development/production) | URI de conexión a MongoDB | Sin default; completar en `.env` |
-| `MONGO_URI_TEST` | Sí (test, o usar `MONGODB_URI_TEST`) | URI de MongoDB para tests | Sin default; completar en `.env.test` |
+| `CLIENT_URL` | Sí en producción | Origen HTTP/HTTPS autorizado para solicitudes CORS del navegador, sin ruta | `http://localhost:3000` en desarrollo y tests |
+| `MONGODB_URI` | Sí (desarrollo/producción) | URI de conexión a MongoDB | Sin valor por defecto; completar en `.env` |
+| `MONGO_URI_TEST` | Sí (test, o usar `MONGODB_URI_TEST`) | URI local de MongoDB para tests; la base debe incluir `test` en el nombre | Sin default; completar en `.env.test` |
 | `NODE_ENV` | No | Entorno (`development`, `test`, `production`) | `development` |
 | `LOG_LEVEL` | No | Nivel mínimo de logging (`fatal,error,warning,info,http,debug`) | `info` |
 | `REQUEST_BODY_LIMIT` | No | Límite de payload JSON/urlencoded para evitar cuerpos excesivos | `1mb` |
 | `JWT_SECRET` | Condicional | Clave para verificar JWT cuando `AUTH_REQUIRED=true` | `""` |
-| `AUTH_REQUIRED` | No | Exige `Authorization: Bearer <token>` en endpoints protegidos (en `production` no puede deshabilitarse) | `false` (`true` en production por default) |
-| `REQUIRE_REPLICASET_TRANSACTIONS` | No | Obliga soporte de transacciones MongoDB al iniciar | `false` en development/test; `true` en production |
-| `INTERNAL_ROUTES_ENABLED` | No | Habilita rutas internas `/api/mocks` y `/api/logger` | `true` fuera de production |
-| `SWAGGER_ENABLED` | No | Habilita `/api/docs` y `/api-docs` | `true` fuera de production |
-| `UPLOAD_BASE_DIR` | No | Directorio base de uploads (recomendado fuera del repo) | `../shipnow-uploads` |
-| `EXTERNAL_SERVICE_BASE_URL` | No | URL base de servicios externos integrados | `""` |
+| `AUTH_REQUIRED` | No | Exige `Authorization: Bearer <token>` en endpoints protegidos (en producción no se puede deshabilitar) | `false` (`true` por defecto en `production`) |
+| `REQUIRE_REPLICASET_TRANSACTIONS` | No | Obliga soporte de transacciones MongoDB al iniciar | `false` en desarrollo y tests; `true` en `production` |
+| `INTERNAL_ROUTES_ENABLED` | No | Habilita rutas internas `/api/mocks` y `/api/logger` | `true` fuera de `production` |
+| `SWAGGER_ENABLED` | No | Habilita `/api/docs` y `/api-docs` | `true` fuera de `production` |
+| `UPLOAD_BASE_DIR` | No | Directorio base para los archivos (recomendado fuera del repo) | `../shipnow-uploads` |
+| `EXTERNAL_SERVICE_BASE_URL` | No | URL base de servicios externos integrados | Sin valor por defecto |
 
 `.env.example` sirve como base para desarrollo y `.env.test.example` para tests.
-En producción, configura estas mismas variables en el gestor de secretos o en
-el entorno de despliegue. La API valida `MONGODB_URI` (o `MONGO_URI_TEST` en
-tests), el puerto, los booleanos y, cuando la autenticación está activa,
-`JWT_SECRET`; si una variable crítica falta o es inválida, el proceso no inicia.
-No reutilices el secreto de prueba en producción.
+En producción, configura estas variables en el entorno de despliegue o en un
+gestor de secretos. `CLIENT_URL` debe ser el origen exacto del frontend; CORS
+solo permite ese origen. En desarrollo y tests, si no se define, se usa
+`http://localhost:3000`. La API valida `MONGODB_URI` (o `MONGO_URI_TEST` en
+tests), `CLIENT_URL`, el puerto y los booleanos. Si la autenticación está
+activa, también requiere `JWT_SECRET`. Si falta una variable obligatoria o su
+valor no es válido, la aplicación no inicia. En producción, usa un secreto
+distinto al de pruebas.
 
 ## Scripts
 
@@ -113,13 +118,15 @@ No reutilices el secreto de prueba en producción.
 | --- | --- |
 | `npm run dev` | Levanta servidor con nodemon |
 | `npm start` | Levanta servidor con node |
-| `npm test` | Ejecuta la suite funcional con Supertest + Mocha |
+| `npm test` | Ejecuta pruebas unitarias y funcionales |
+| `npm run test:unit` | Ejecuta pruebas unitarias con Node.js |
+| `npm run test:functional` | Ejecuta pruebas funcionales con Mocha, Chai y Supertest |
 
 ## Política de autorización
 
 - Endpoints de escritura (`POST`, `PUT`, `DELETE`) usan middleware de roles y JWT cuando `AUTH_REQUIRED=true`.
 - Endpoints de lectura (`GET`) se mantienen públicos por diseño en esta entrega.
-- En `production`, la app no inicia si `AUTH_REQUIRED=false`.
+- En producción, la app no inicia si `AUTH_REQUIRED=false`.
 - En producción `AUTH_REQUIRED` queda activo por defecto y exige `JWT_SECRET`.
 
 ## Performance y escalabilidad
@@ -139,7 +146,7 @@ No reutilices el secreto de prueba en producción.
 
 - `INTERNAL_ROUTES_ENABLED=false` deshabilita `/api/mocks` y `/api/logger`.
 - `SWAGGER_ENABLED=false` deshabilita `/api/docs` y `/api-docs`.
-- En `production` ambos defaults quedan en `false`.
+- En producción, ambas opciones quedan en `false` por defecto.
 
 ## Producción y Docker
 
@@ -154,8 +161,9 @@ No reutilices el secreto de prueba en producción.
 docker build -t shipnow-api:local .
 ```
 
-La imagen usa Node.js 22, instala dependencias de producción y ejecuta la API
-como usuario no-root. El puerto interno por defecto es `3003`.
+La imagen usa un build multi-stage: instala dependencias de producción en una
+etapa y copia solo `node_modules`, `package.json` y `src/` a la imagen final.
+El runner usa Node.js 22, ejecuta como usuario no-root y expone el puerto `3003`.
 
 ### Ejecutar con una base MongoDB externa
 
@@ -164,13 +172,13 @@ docker run --rm -p 3003:3003 --env-file .env.production -v shipnow-uploads:/ship
 ```
 
 `.env.production` debe mantenerse fuera del repositorio y contener como mínimo
-`NODE_ENV=production`, `PORT=3003`, `MONGODB_URI`, `JWT_SECRET` y
-`LOG_LEVEL=info`. `AUTH_REQUIRED` no puede ser `false` en producción. La URI de
-MongoDB debe ser accesible desde el contenedor (no uses `localhost` para una
-base que corre en el host) y soportar transacciones (replica set o mongos), como
-requiere `REQUIRE_REPLICASET_TRANSACTIONS=true` por defecto en producción.
-También se pueden inyectar estas variables desde la plataforma de despliegue
-en lugar de usar un archivo.
+`NODE_ENV=production`, `PORT=3003`, `MONGODB_URI`, `CLIENT_URL`, `JWT_SECRET` y
+`LOG_LEVEL=info`. `CLIENT_URL` es el origen del frontend, sin ruta.
+`AUTH_REQUIRED` no puede ser `false` en producción. La URI de MongoDB debe ser
+accesible desde el contenedor (no uses `localhost` para una base que corre en
+el host) y soportar transacciones (replica set o mongos), como requiere
+`REQUIRE_REPLICASET_TRANSACTIONS=true` por defecto. También puedes inyectar las
+variables desde la plataforma de despliegue en lugar de usar un archivo.
 
 Para desarrollo local con MongoDB incluido:
 
@@ -185,8 +193,8 @@ uploads en volúmenes. Puedes cambiar el puerto expuesto en el host con
 ### Verificaciones
 
 - Health check: `GET http://localhost:3003/api/health`
-- Swagger: `GET http://localhost:3003/api/docs` (habilitado en development/test;
-  deshabilitado por defecto en production)
+- Swagger: `GET http://localhost:3003/api/docs` (habilitado en desarrollo y tests;
+  deshabilitado por defecto en producción)
 - Endpoint principal: `GET http://localhost:3003/api/users?page=1&limit=20`
 
 ### Rutas internas, logs y archivos
@@ -195,9 +203,11 @@ uploads en volúmenes. Puedes cambiar el puerto expuesto en el host con
   (`INTERNAL_ROUTES_ENABLED=false`); Swagger también queda deshabilitado
   (`SWAGGER_ENABLED=false`). Se pueden habilitar explícitamente si el despliegue
   lo requiere y está protegido por controles de red/autorización apropiados.
-- Winston escribe a consola y a archivos rotativos bajo `logs/`. En Docker los
-  archivos del contenedor son efímeros por defecto; consulta la salida con
-  `docker logs` y centraliza los logs para conservarlos en producción.
+- Winston escribe `logs/error.log` y `logs/combined.log`; la consola se habilita
+  únicamente en desarrollo. En producción, los archivos del contenedor son
+  efímeros por defecto: monta `logs/` como volumen o usa un agente para
+  conservar y centralizar los logs. En Compose de desarrollo puedes consultar
+  la salida de consola con `docker logs`.
 - Los uploads se guardan fuera del código en `UPLOAD_BASE_DIR` (en la imagen,
   `/shipnow-uploads`). El volumen de Compose persiste estos archivos; en
   producción define respaldo y retención, o usa almacenamiento de objetos. No
@@ -209,6 +219,7 @@ uploads en volúmenes. Puedes cambiar el puerto expuesto en el host con
 ### Hardening de contenedor aplicado
 
 - Ejecución con usuario no-root (`node`)
+- Build multi-stage con dependencias de producción aisladas
 - `HEALTHCHECK` contra `/api/health`
 - Instalación de dependencias solo de producción (`npm ci --omit=dev`)
 
@@ -222,7 +233,8 @@ Estas reglas se aplican mediante [.gitignore](./.gitignore) y [.dockerignore](./
 
 ## Testing
 
-La suite funcional del proyecto se ejecuta con:
+La suite completa incluye pruebas unitarias con Node.js y pruebas funcionales
+con Mocha, Chai y Supertest:
 
 ```bash
 npm test
@@ -230,7 +242,7 @@ npm test
 
 ### Cobertura de tests
 
-La suite funcional integra **53 pruebas aprobadas** con Supertest y Mocha, cubriendo las rutas principales, la autenticación, la paginación, los uploads y el health check:
+La suite funcional tiene **57 pruebas** y la unitaria, **21**:
 
 | Suite | Tests | Cobertura |
 |-------|-------|-----------|
@@ -238,18 +250,29 @@ La suite funcional integra **53 pruebas aprobadas** con Supertest y Mocha, cubri
 | API de pedidos | 8 | CRUD, estados, comprobantes, filtros y paginación |
 | API de productos | 1 | Paginación y límite máximo |
 | Cargas de archivos | 6 | Carga válida, archivo faltante, tipos, duplicados y entidad inexistente |
-| API de entregas | 8 | Estados, sincronización con pedidos, conflictos y paginación |
-| API de mocks | 6 | Generación de usuarios/pedidos, snapshots y validación de seed |
-| Logger / Swagger / health / 404 | 6 | Rutas técnicas, documentación, health check y errores |
+| API de entregas | 9 | Estados, tracking, sincronización con pedidos, conflictos y paginación |
+| API de mocks | 7 | Generación de usuarios/pedidos/entregas, snapshots y validación de seed |
+| Logger / Swagger / health / 404 / CORS | 8 | Rutas técnicas, documentación, health check, errores y origen permitido |
 | Middleware de autenticación | 7 | JWT, roles permitidos y denegados |
-| **TOTAL** | **53** | **Todas aprobadas** ✅ |
+| **Total funcional** | **57** | **Todas aprobadas** |
+
+Las 21 pruebas unitarias cubren errores, logger, validación segura de la base de
+test, controlador de pedidos, repositorio y endpoint de usuarios. `npm test` ejecuta
+ambos grupos.
 
 ### Requisitos para testing
 
 - Node.js 20+
-- MongoDB configurado en `MONGO_URI_TEST` (o `MONGODB_URI_TEST`) para `NODE_ENV=test`
-- Variables cargadas desde `.env.test` o `.env`
-- Multer upload folders writable (auto-created during tests)
+- MongoDB local configurado en `MONGO_URI_TEST` (o `MONGODB_URI_TEST`) y con
+  `test` en el nombre de la base
+- Copiar `.env.test.example` a `.env.test` antes de correr las pruebas:
+
+```powershell
+Copy-Item .env.test.example .env.test
+```
+
+- El setup rechaza hosts remotos y bases cuyo nombre no identifica testing
+- La carpeta de uploads se crea automáticamente y debe tener permisos de escritura.
 
 ### Ejecución de tests
 
@@ -258,19 +281,20 @@ La suite funcional integra **53 pruebas aprobadas** con Supertest y Mocha, cubri
 npm test
 
 # Resultado esperado
-# ✓ 53 pruebas aprobadas
+# 21 pruebas unitarias aprobadas
+# 57 pruebas funcionales aprobadas
 ```
 
 ### Tests de carga de archivos (Módulo 7)
 
 Las 6 pruebas de carga de archivos validan:
 
-1. ✅ **Carga exitosa**: documento válido con metadatos
-2. ✅ **Archivo faltante**: error MISSING_FILE (400)
-3. ✅ **Tipo no permitido**: error INVALID_DOCUMENT_TYPE (400)
-4. ✅ **Duplicado permitido por tipo** cuando el binario es distinto
-5. ✅ **Duplicado binario bloqueado** con RESOURCE_CONFLICT_ERROR (409)
-6. ✅ **Entidad no existe**: error DELIVERY_NOT_FOUND_ERROR (404)
+1. **Carga exitosa**: documento válido con metadatos
+2. **Archivo faltante**: error MISSING_FILE (400)
+3. **Tipo no permitido**: error INVALID_DOCUMENT_TYPE (400)
+4. **Duplicado permitido por tipo** cuando el binario es distinto
+5. **Duplicado binario bloqueado** con RESOURCE_CONFLICT_ERROR (409)
+6. **Entidad no existe**: error DELIVERY_NOT_FOUND_ERROR (404)
 
 ## Rutas principales
 
@@ -294,6 +318,7 @@ Base: `/api`
 - Entregas:
   - `GET /api/deliveries`
   - `GET /api/deliveries/:id`
+  - `GET /api/deliveries/:id/tracking`
   - `POST /api/deliveries`
   - `PUT /api/deliveries/:id`
   - `DELETE /api/deliveries/:id`
@@ -340,11 +365,10 @@ Base: `/api`
 
 **Razonamiento**:
 - Los nombres originales pueden tener caracteres especiales, espacios o colisiones
-- Nombrar con timestamp + aleatorio previene:
-  - Sobrescrituras accidentales si suben dos archivos con igual nombre
-  - Ataques que intenten adivinar URLs de archivos
-  - Problemas con caracteres unicode
-- El nombre original se preserva en metadatos para que el usuario sepa qué subió
+- Uso un timestamp y un valor aleatorio para reducir las colisiones y no depender
+  del nombre original.
+- El nombre original se guarda en los metadatos para identificar el archivo que
+  se subió.
 
 #### 4. Validaciones en dos capas: Multer + Service
 
@@ -363,15 +387,14 @@ Base: `/api`
 
 **Decisión**: Guardar objeto con `{ originalName, fileName, path, mimetype, size, type, uploadedAt }`.
 
-**Razonamiento**:
-- Permite queries rápidas: "¿cuántos documentos de tipo DNI tiene el usuario?"
+- Permite consultas rápidas, por ejemplo, buscar los documentos de un usuario por tipo.
 - Facilita auditoría: quién subió, cuándo, qué tipo
-- Permite soft-deletes: marcar como inactivo sin borrar el archivo
+- Permite marcar un archivo como inactivo sin borrarlo
 - La aplicación puede recuperar el archivo sin listar el directorio
 
 ### Configuración de Multer
 
-La configuración se mantiene centralizada en `src/middlewares/uploadFileMiddleware.js`:
+La configuración está en `src/middlewares/uploadFileMiddleware.js`:
 
 - **diskStorage** con nombres controlados y seguros
 - **Carpetas organizadas**: `UPLOAD_BASE_DIR/{documents, receipts, proofs}`
@@ -479,13 +502,13 @@ curl -X POST http://localhost:3003/api/deliveries/507f1f77bcf86cd799439011/proof
 
 ### Validaciones implementadas
 
-- ✅ Archivo requerido (MISSING_FILE)
-- ✅ Tipo MIME permitido (INVALID_FILE_TYPE)
-- ✅ Extensión permitida (INVALID_FILE_TYPE)
-- ✅ Tamaño máximo 5MB (FILE_TOO_LARGE)
-- ✅ Tipo de documento válido (INVALID_DOCUMENT_TYPE)
-- ✅ Entidad existe antes de asociar archivo
-- ✅ Campo correcto en request (UNEXPECTED_FILE_FIELD)
+- Archivo requerido (MISSING_FILE)
+- Tipo MIME permitido (INVALID_FILE_TYPE)
+- Extensión permitida (INVALID_FILE_TYPE)
+- Tamaño máximo 5MB (FILE_TOO_LARGE)
+- Tipo de documento válido (INVALID_DOCUMENT_TYPE)
+- Entidad existente antes de asociar el archivo
+- Campo correcto en el request (UNEXPECTED_FILE_FIELD)
 
 ### Recuperación de documentos
 
@@ -528,24 +551,26 @@ Errores contemplados para archivos incluidos:
 
 ## Logging y trazabilidad
 
-- request logging por middleware HTTP
+- registro de requests por middleware HTTP
 - logs de negocio y errores con Winston
-- archivos rotados por fecha en `logs/`
+- archivos `logs/error.log` y `logs/combined.log`
+- salida a consola solo en desarrollo
 - eventos de carga de archivos y asociación a entidades registrados con contexto útil
 
-## Criterio profesional y ética aplicada
+## Criterios que tuve en cuenta
 
-Este proyecto se trabaja con foco en:
+Al implementar la API, prioricé:
 
 - corrección técnica
-- consistencia de contratos HTTP
-- trazabilidad operativa
-- separación clara de responsabilidades
-- almacenamiento seguro y mínimo de datos
-- documentación útil para revisión y mantenimiento
+- mantener respuestas HTTP consistentes
+- separar las responsabilidades del código
+- guardar solo los metadatos necesarios
+- dejar instrucciones para ejecutar y probar el proyecto
 
 ## Bitácora del proyecto
 
 El historial técnico y decisiones del proyecto está en:
 
 - `BITACORA_PROYECTO.md`
+#   B a c k e n d 3 - E n t r e g a - F i n a l - A l e j a n d r o  
+ 
