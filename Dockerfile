@@ -1,4 +1,11 @@
-FROM node:22-alpine
+FROM node:22-alpine AS production-deps
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+FROM node:22-alpine AS runner
 
 WORKDIR /app
 
@@ -6,11 +13,9 @@ ENV NODE_ENV=production \
     PORT=3003 \
     UPLOAD_BASE_DIR=/shipnow-uploads
 
+COPY --from=production-deps --chown=node:node /app/node_modules ./node_modules
 COPY --chown=node:node package.json ./
-COPY --chown=node:node package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
-
-COPY --chown=node:node . .
+COPY --chown=node:node src ./src
 RUN mkdir -p /shipnow-uploads /app/logs && chown -R node:node /shipnow-uploads /app
 
 EXPOSE 3003

@@ -30,6 +30,30 @@ const parseUrl = (value, variableName) => {
   }
 };
 
+const parseOrigin = (value, variableName) => {
+  if (!value) {
+    return '';
+  }
+
+  try {
+    const url = new URL(value);
+    if (
+      !['http:', 'https:'].includes(url.protocol) ||
+      url.username ||
+      url.password ||
+      url.pathname !== '/' ||
+      url.search ||
+      url.hash
+    ) {
+      throw new Error();
+    }
+
+    return url.origin;
+  } catch (_error) {
+    throw new Error(`${variableName} debe ser un origen HTTP o HTTPS válido, sin ruta.`);
+  }
+};
+
 const nodeEnv = process.env.NODE_ENV ?? 'development';
 const portValue = process.env.PORT ?? String(DEFAULT_PORT);
 const parsedPort = Number(portValue);
@@ -40,6 +64,15 @@ if (!Number.isInteger(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
 const allowedNodeEnvs = ['development', 'test', 'production'];
 if (!allowedNodeEnvs.includes(nodeEnv)) {
   throw new Error(`NODE_ENV invalido. Valores permitidos: ${allowedNodeEnvs.join(', ')}.`);
+}
+
+const defaultClientUrl = nodeEnv === 'production' ? '' : 'http://localhost:3000';
+const clientUrl = parseOrigin(
+  process.env.CLIENT_URL || defaultClientUrl,
+  'CLIENT_URL'
+);
+if (nodeEnv === 'production' && !clientUrl) {
+  throw new Error('CLIENT_URL es obligatorio en production.');
 }
 
 const requestBodyLimit = (process.env.REQUEST_BODY_LIMIT || '1mb').trim().toLowerCase();
@@ -106,6 +139,7 @@ const config = Object.freeze({
   mongoUri: mongoUriFromEnv,
   environment: nodeEnv,
   nodeEnv,
+  clientUrl,
   logLevel,
   requestBodyLimit,
   jwtSecret,

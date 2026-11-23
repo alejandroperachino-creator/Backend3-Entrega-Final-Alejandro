@@ -190,4 +190,23 @@ describe('Functional - Deliveries API', () => {
     const responseDriverId = filteredResponse.body.payload[0].driver?._id || filteredResponse.body.payload[0].driver;
     expect(String(responseDriverId)).to.equal(driverResponse.body.payload._id);
   });
+
+  it('GET /api/deliveries/:id/tracking devuelve el estado y sus marcas de tiempo', async () => {
+    const customerResponse = await request(app).post('/api/users').send(createUserPayload(USER_ROLES.USER));
+    const orderResponse = await request(app).post('/api/orders').send(createOrderPayload(customerResponse.body.payload._id));
+    const deliveryResponse = await request(app)
+      .post('/api/deliveries')
+      .send({ order: orderResponse.body.payload._id });
+
+    const trackingResponse = await request(app)
+      .get(`/api/deliveries/${deliveryResponse.body.payload._id}/tracking`);
+
+    expect(trackingResponse.status).to.equal(200);
+    expect(trackingResponse.body.payload).to.include({
+      _id: deliveryResponse.body.payload._id,
+      status: DELIVERY_STATUS.PENDING,
+      assignedAt: null,
+      deliveredAt: null
+    });
+  });
 });

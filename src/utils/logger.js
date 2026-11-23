@@ -1,5 +1,6 @@
 import winston from 'winston';
-import DailyRotateFile from 'winston-daily-rotate-file';
+import { mkdirSync } from 'node:fs';
+import path from 'node:path';
 import config from '../config/env.config.js';
 import { getRequestId } from './requestContext.js';
 
@@ -63,6 +64,28 @@ const selectedLevel = config.logLevel && Object.prototype.hasOwnProperty.call(cu
         ? 'info'
         : 'debug';
 
+const logDirectory = path.resolve(process.cwd(), 'logs');
+mkdirSync(logDirectory, { recursive: true });
+
+const transports = [
+    new winston.transports.File({
+        filename: path.join(logDirectory, 'error.log'),
+        level: 'error',
+        format: fileFormat,
+    }),
+    new winston.transports.File({
+        filename: path.join(logDirectory, 'combined.log'),
+        level: selectedLevel,
+        format: fileFormat,
+    }),
+];
+
+if (config.environment === 'development') {
+    transports.unshift(new winston.transports.Console({
+        format: combine(colorize({ all: true }), consoleFormat),
+    }));
+}
+
 const logger = winston.createLogger({
     levels: customLevels.levels,
     level: selectedLevel,
@@ -71,29 +94,7 @@ const logger = winston.createLogger({
         addRequestId(),
         errors({ stack: true })
     ),
-    transports: [
-        new winston.transports.Console({
-            format: combine(colorize({ all: true }), consoleFormat),
-        }),
-        new DailyRotateFile({
-            filename: 'logs/error-%DATE%.log',
-            datePattern: 'YYYY-MM-DD',
-            level: 'error',
-            zippedArchive: true,
-            maxSize: '20m',
-            maxFiles: '14d',
-            format: fileFormat,
-        }),
-        new DailyRotateFile({
-            filename: 'logs/app-%DATE%.log',
-            datePattern: 'YYYY-MM-DD',
-            level: config.environment === 'production' ? 'info' : 'debug',
-            zippedArchive: true,
-            maxSize: '20m',
-            maxFiles: '14d',
-            format: fileFormat,
-        }),
-    ],
+    transports,
 });
 
 export default logger;

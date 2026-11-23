@@ -22,6 +22,8 @@ const options = {
             { name: 'Products', description: 'Gestión de productos' },
             { name: 'Orders', description: 'Gestión de pedidos' },
             { name: 'Deliveries', description: 'Gestión de entregas' },
+            { name: 'Tracking', description: 'Seguimiento del estado de una entrega' },
+            { name: 'Health', description: 'Estado operativo de la API' },
             { name: 'Mocks', description: 'Generación e inserción de datos de prueba' },
             { name: 'Logger', description: 'Herramientas de validación del sistema de logs (no negocio)' }
         ],
@@ -58,12 +60,27 @@ const options = {
                         },
                         timestamp: { type: 'string', format: 'date-time' }
                     }
+                },
+                HealthResponse: {
+                    type: 'object',
+                    properties: {
+                        status: { type: 'string', example: 'ok' },
+                        environment: { type: 'string', example: 'development' },
+                        uptimeSeconds: { type: 'integer', example: 120 },
+                        timestamp: { type: 'string', format: 'date-time' }
+                    }
+                },
+                Shipment: {
+                    description: 'Representación del envío logístico de ShipNow, basado en una orden.',
+                    allOf: [
+                        { $ref: '#/components/schemas/Order' }
+                    ]
                 }
             }
         }
 
     },
-    apis: ["./src/routes/*.js"]
+    apis: ["./src/routes/*.js", "./src/app.js"]
     
 };
 

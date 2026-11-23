@@ -1,7 +1,23 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import path from 'node:path';
 import request from 'supertest';
 import app from '../src/app.js';
+import logger from '../src/utils/logger.js';
+
+test('logger escribe archivos estables y no configura consola en test', () => {
+  const fileNames = logger.transports
+    .map((transport) => transport.filename)
+    .filter(Boolean)
+    .map((fileName) => path.basename(fileName));
+  const hasConsoleTransport = logger.transports.some(
+    (transport) => transport.constructor.name === 'Console'
+  );
+
+  assert.ok(fileNames.includes('error.log'));
+  assert.ok(fileNames.includes('combined.log'));
+  assert.equal(hasConsoleTransport, false);
+});
 
 test('GET /api/logger/test responde 200 y genera logs', async () => {
   const response = await request(app).get('/api/logger/test');

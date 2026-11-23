@@ -11,7 +11,9 @@ import config from './config/env.config.js';
 const app = express();
 const startTime = Date.now();
 
-app.use(cors());
+app.use(cors({
+  origin: (origin, callback) => callback(null, origin === config.clientUrl)
+}));
 app.use(express.json({ limit: config.requestBodyLimit }));
 app.use(express.urlencoded({ extended: true, limit: config.requestBodyLimit }));
 app.use(httpLogger);
@@ -24,7 +26,20 @@ if (config.swaggerEnabled) {
 
 app.use('/api', apiRouter);
 
-
+/**
+ * @openapi
+ * /api/health:
+ *   get:
+ *     summary: Consultar el estado de salud de la API
+ *     tags: ["Health"]
+ *     responses:
+ *       200:
+ *         description: Estado operativo y métricas básicas
+ *         content:
+ *           application/json:
+ *             schema:
+ *               $ref: "#/components/schemas/HealthResponse"
+ */
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',

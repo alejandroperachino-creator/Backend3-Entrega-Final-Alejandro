@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
+import { after, before, beforeEach, describe, it } from 'node:test';
 import request from 'supertest';
-import mongoose from 'mongoose';
-import dotenv from 'dotenv';
-import app from '../src/app.js';
 import User from '../src/models/user.model.js';
-
-dotenv.config();
+import app from '../src/app.js';
+import {
+    connectTestDatabase,
+    disconnectTestDatabase
+} from './helpers/testDatabase.js';
 
 function buildUser() {
     const unique = `${Date.now()}-${Math.floor(Math.random() * 100000)}`;
@@ -20,20 +21,7 @@ function buildUser() {
 
 describe('User Endpoint Tests', () => {
 before(async () => {
-    const mongoUri =
-        process.env.MONGO_URI_TEST ||
-        process.env.MONGODB_URI_TEST ||
-        process.env.MONGO_URI ||
-        process.env.MONGODB_URI;
-
-    if (!mongoUri) {
-        throw new Error(
-            'No hay URI de Mongo para tests. Configura MONGO_URI_TEST (o MONGODB_URI_TEST).'
-        );
-    }
-
-    await mongoose.connect(mongoUri);
-    await mongoose.connection.db.dropDatabase();
+    await connectTestDatabase();
 });
 
 beforeEach(async () => {
@@ -41,10 +29,8 @@ beforeEach(async () => {
 });
 
 after(async () => {
-    if (mongoose.connection.readyState === 1) {
-        await mongoose.connection.db.dropDatabase();
-    }
-    await mongoose.disconnect();
+    await User.deleteMany({});
+    await disconnectTestDatabase();
 });
 
 it('POST /api/users crea un usuario', async () => {

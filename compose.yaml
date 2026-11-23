@@ -21,6 +21,7 @@ services:
     environment:
       NODE_ENV: development
       PORT: 3003
+      CLIENT_URL: ${CLIENT_URL:-http://localhost:3000}
       MONGODB_URI: mongodb://mongo:27017/shipnow
       AUTH_REQUIRED: "false"
       REQUIRE_REPLICASET_TRANSACTIONS: "false"

@@ -1,30 +1,33 @@
 # Bitácora técnica del proyecto ShipNow
 
-## Actualización Entrega 8: Rendimiento, producción y Docker
+## Actualización Entrega Final: Rendimiento, producción y Docker
 
-En esta pre-entrega revisé el comportamiento de la API y agregué medidas básicas para ejecutarla de forma más controlada. Las decisiones se enfocaron en limitar respuestas, validar la configuración al inicio y documentar una ejecución reproducible con Docker.
+En esta última parte revisé lo que faltaba para entregar: paginación,
+configuración por entorno, Docker, pruebas y documentación. Anoto acá los cambios
+y las decisiones que fui tomando.
 
 ### Resumen técnico de lo incorporado
 
-1. **Performance y escalabilidad**
-   - Se agregó paginación y límites en listados de usuarios, órdenes, entregas y productos (`page`, `limit` con máximo de 100).
-   - Se agregaron filtros en listados (`role`, `email`, `status`, `priority`, `customer`, `driver`, `order`).
-   - Los productos muestran disponibles con stock por defecto; `includeInactive=true` amplía el listado.
+1. **Rendimiento y paginación**
+   - Agregué paginación y un máximo de 100 resultados en usuarios, órdenes, entregas y productos (`page`, `limit`).
+   - Agregué filtros para los campos que se usan en esos listados (`role`, `email`, `status`, `priority`, `customer`, `driver`, `order`).
+   - Los productos con stock aparecen por defecto; `includeInactive=true` también incluye los inactivos.
 
 2. **Preparación para producción**
-   - Se validan variables críticas al inicio, incluidos puerto, URI de MongoDB y valores booleanos.
+   - Validé al inicio las variables necesarias, como el puerto, la URI de MongoDB y los booleanos.
    - En `production`, la autenticación queda activa y requiere `JWT_SECRET`.
-   - `REQUEST_BODY_LIMIT` es configurable para evitar cuerpos de request excesivos.
-   - El health check en `/api/health` responde solo datos seguros: `status`, `environment`, `uptimeSeconds`, `timestamp`.
-   - En producción, mocks, logger test y Swagger quedan deshabilitados por defecto.
+   - `CLIENT_URL` configura el único origen permitido por CORS; es obligatorio en `production`.
+   - Dejé configurable `REQUEST_BODY_LIMIT` para limitar el tamaño de los requests.
+   - El health check en `/api/health` devuelve `status`, `environment`, `uptimeSeconds` y `timestamp`, sin incluir datos sensibles.
+   - En producción, mocks, la ruta de prueba del logger y Swagger quedan deshabilitados por defecto.
 
 3. **Seguridad y consistencia de dominio**
-   - Endpoints de escritura usan JWT + roles cuando `AUTH_REQUIRED=true`.
-   - Se reforzó la regla de negocio: una orden no puede tener más de una entrega (respuesta 409 en conflicto).
-   - Se mantuvo manejo transaccional con fallback controlado según capacidades de MongoDB.
+   - Los endpoints de escritura usan JWT y roles cuando `AUTH_REQUIRED=true`.
+   - Agregué la regla para evitar que una orden tenga más de una entrega; si ya existe, la API responde 409.
+   - El manejo de transacciones depende de las capacidades de MongoDB.
 
 4. **Dockerización**
-   - Se incorporó un `Dockerfile` con:
+   - Dejé un `Dockerfile` multi-stage que:
      - `npm ci --omit=dev`
      - ejecución con usuario no-root (`node`)
      - `HEALTHCHECK` sobre `/api/health`
@@ -33,129 +36,120 @@ En esta pre-entrega revisé el comportamiento de la API y agregué medidas bási
      - `.env*`, `node_modules`, logs, uploads generados, coverage y temporales.
 
 5. **Documentación y pruebas**
-   - README actualizado con variables por entorno, ejecución local, tests, Swagger y Docker.
-   - OpenAPI actualizado con `BearerAuth` y parámetros de paginación/filtros.
-   - Suite funcional verificada: **53 pruebas aprobadas**.
-   - La imagen se construyó y se comprobó en ejecución: health check, Swagger y listado principal respondieron correctamente.
+   - Actualicé el README con las instrucciones para configurar el entorno, correr los tests y usar Docker.
+   - Actualicé OpenAPI con `BearerAuth` y los parámetros de paginación y filtros.
+   - En la última ejecución pasaron **57 pruebas funcionales y 21 unitarias**.
+   - Ya había levantado la imagen y comprobado health, Swagger y un listado. Después de agregar CORS volví a construir la imagen y validé la configuración de Compose.
 
-## 1) Alcance y criterio de trabajo
+## 1) Cómo organicé el proyecto
 
-Este proyecto se desarrolló con foco en un backend profesional y mantenible para una solución logística, priorizando:
+Fui trabajando la API por partes. La idea fue mantener las rutas, la lógica de
+negocio y el acceso a MongoDB en capas separadas. Además, agregué:
 
-- separación de responsabilidades por capas
-- integración clara entre negocio y persistencia
-- manejo centralizado de errores y logging
-- documentación técnica útil para revisión y consumo
-- crecimiento controlado para nuevas funcionalidades
+- manejo centralizado de errores y logs
+- documentación para consultar y probar las rutas
+- validaciones para los datos y archivos que recibe la API
 
 ## 2) Línea de evolución del proyecto
 
 ### Etapa A - Base y estructura
 
-Se definió la base Express + MongoDB con una organización por capas:
+Empecé con Express y MongoDB, y organicé el código en estas capas:
 
 - `app.js` para middlewares y rutas
 - `server.js` para bootstrap y conexión a MongoDB
 - `routes/controllers/services/repositories/models`
 
-Resultado: estructura limpia y escalable para incorporar nuevas entidades y comportamientos sin acoplar HTTP y dominio.
+Con esa separación, las rutas no acceden directamente a MongoDB.
 
-### Etapa B - Dominio y casos de negocio
+### Etapa B - Entidades y reglas del negocio
 
-Se modelaron entidades principales: usuarios, productos, pedidos y entregas.
+Modelé las entidades principales: usuarios, productos, pedidos y entregas.
 
-Se implementaron CRUDs y validaciones iniciales de negocio en services:
+Después agregué los CRUDs y algunas validaciones en los servicios:
 
 - existencia de recursos relacionados
 - datos requeridos antes de persistir
 - estados y prioridades con constantes
 - reglas de negocio para asignación y actualización de entregas
 
-Resultado: API funcional con lógica de negocio centralizada en la capa de servicios.
+Las validaciones y reglas del negocio quedaron en los servicios.
 
-### Etapa C - Errores centralizados
+### Etapa C - Manejo de errores
 
-Se migró a un manejo uniforme de errores:
+Unifiqué el formato de los errores usando:
 
 - diccionario central en `src/utils/errors.js`
 - `createError` + `CustomError`
 - middleware global de errores
 - middleware 404 para rutas inexistentes
 
-Resultado: respuestas consistentes para el cliente y mayor trazabilidad para diagnóstico.
+Ahora los errores pasan por el mismo middleware y mantienen un formato común.
 
-### Etapa D - Logging y observabilidad
+### Etapa D - Logs
 
-Se incorporó logging estructurado:
+Agregué Winston y un middleware HTTP para registrar:
 
 - logger central con niveles
 - middleware HTTP para trazas por request
-- salida por consola y archivos rotados
+- consola en desarrollo y archivos `error.log` y `combined.log`
 - registros de eventos relevantes para negocio y carga documental
 
-Resultado: mayor visibilidad operativa y mejor capacidad para detectar fallos reales.
+Así puedo consultar las requests y los errores durante el desarrollo.
 
-### Etapa E - Swagger/OpenAPI
+### Etapa E - Documentación con Swagger
 
-Se documentaron endpoints reales de la API:
+Documenté las rutas de la API con Swagger:
 
 - configuración en `src/config/swagger.js`
 - UI en `/api/docs` y `/api-docs`
 - documentación por módulos (`Users`, `Products`, `Orders`, `Deliveries`, `Mocks`, `Logger`)
 - schemas y respuestas reutilizables
 
-Resultado: documentación útil para revisión técnica, integración y validación manual.
+La documentación se puede abrir desde `/api/docs` y sirve para probar las rutas.
 
 ### Etapa F - Módulo 7: carga de archivos, documentos y comprobantes
 
-**Desafío**: Incorporar gestión de archivos de forma segura, validada y asociada a entidades sin perder trazabilidad.
+Para el Módulo 7 agregué la carga de documentos y comprobantes, con validaciones y asociación a usuarios, órdenes o entregas.
 
 **Decisiones tomadas**:
 
-1. **Almacenamiento: diskStorage vs base de datos vs cloud**
-   - ❌ Guardar en MongoDB: archivos grandes ralentizan consultas
-   - ❌ S3/cloud: complejidad innecesaria para proyecto educativo
-   - ✅ **Elegí diskStorage**: simple, rápido, separar datos (BD) de archivos (disco)
-   - Metadatos en MongoDB para queries rápidas, archivos en carpetas
+1. **Almacenamiento**
+   - Para esta entrega elegí `diskStorage`. Así los archivos quedan fuera de MongoDB y los metadatos se guardan en la base.
+   - No incorporé almacenamiento cloud porque no era necesario para probar el proyecto localmente.
 
-2. **Organización: carpeta única vs carpetas por tipo**
-   - ❌ Una carpeta: difícil de auditar y hacer retención selectiva
-   - ✅ **Elegí 3 carpetas** (`documents`, `receipts`, `proofs`): facilita backups, auditoría y políticas de retención diferentes por tipo
+2. **Organización de carpetas**
+   - Separé los archivos en `documents`, `receipts` y `proofs` para encontrarlos y limpiarlos por tipo.
 
-3. **Nombres de archivo: original vs timestamp + aleatorio**
-   - ❌ Nombre original: caracteres especiales, colisiones, riesgos de seguridad
-   - ✅ **Elegí timestamp + aleatorio**: único, seguro, imposible de adivinar. El original se guarda en metadatos
+3. **Nombres de archivo**
+   - La aplicación genera un nombre con timestamp y un valor aleatorio. Esto reduce las colisiones y evita guardar el archivo con el nombre original.
+   - El nombre original se conserva en los metadatos.
 
-4. **Validaciones: una capa vs dos capas**
-   - Multer escribe el archivo en disco antes de que el servicio compruebe que la entidad existe.
-   - ✅ **Elegí dos capas**:
-     - Multer valida tipo/tamaño/extensión rápidamente
-     - Service valida que la entidad exista antes de asociar
-     - Si la asociación falla, el archivo no se elimina automáticamente; queda como mejora pendiente definir una limpieza de archivos huérfanos
+4. **Validaciones**
+   - Multer comprueba tipo, extensión y tamaño. Después, el servicio comprueba que exista la entidad antes de asociar el archivo.
+   - Como Multer escribe en disco antes de esa segunda comprobación, puede quedar un archivo huérfano si falla la asociación. La limpieza automática queda pendiente.
 
-5. **Qué guardar en BD: solo ruta vs metadatos completos**
-   - ❌ Solo ruta: no puedo hacer queries por tipo de documento o tamaño
-   - ✅ **Elegí metadatos completos**: `originalName`, `fileName`, `path`, `mimetype`, `size`, `type`, `uploadedAt`
-   - Permite auditoría, queries de negocio, soft-deletes
+5. **Metadatos**
+   - Guardo `originalName`, `fileName`, `path`, `mimetype`, `size`, `type` y `uploadedAt` en MongoDB para poder identificar y consultar los archivos asociados.
 
-**Resultado**: Los archivos y sus metadatos se almacenan por separado y las cargas tienen límites y tipos permitidos. La aplicación no limpia automáticamente los archivos huérfanos cuando falla una asociación; esa limitación se registra como deuda técnica.
+Los archivos se guardan fuera de la base y tienen límites de tamaño y tipos permitidos. La aplicación todavía no limpia automáticamente los archivos huérfanos.
 
-## 3) Ajustes de calidad realizados
+## 3) Cambios de la revisión final
 
-Durante la revisión final del proyecto se corrigieron desalineaciones entre configuración, documentación y comportamiento real:
+Al cerrar la entrega revisé estos puntos para que la documentación y el código coincidieran:
 
-1. Se centralizó la lógica de almacenamiento y validación de archivos en `src/middlewares/uploadFileMiddleware.js`.
-2. Se conectó el manejo de errores de Multer con el formato general del backend en `src/middlewares/errorHandler.js`.
-3. Se definieron errores específicos para archivos y tipo de documento en `src/utils/errors.js`.
-4. Se incorporó la asociación de metadatos a documentos y comprobantes en los modelos correspondientes.
-5. Se ignoró la carpeta `uploads/` en Git para evitar subir contenido generado en runtime.
-6. Se ajustó la documentación para reflejar el comportamiento real del sistema y ejemplos de uso de endpoints de archivos.
-7. Se validó que la configuración de producción desactive por defecto las rutas internas y Swagger, y exija autenticación.
-8. Se incorporó un health check y se probaron endpoints principales dentro del contenedor.
+1. Dejé la validación de cargas en `src/middlewares/uploadFileMiddleware.js`.
+2. Conecté los errores de Multer al formato general de `src/middlewares/errorHandler.js`.
+3. Agregué errores para archivos y tipos de documento en `src/utils/errors.js`.
+4. Asocié los metadatos de documentos y comprobantes a sus modelos.
+5. Ignoré `uploads/` en Git para no subir archivos creados durante las pruebas.
+6. Actualicé los ejemplos de carga de archivos en el README.
+7. Configuré producción para desactivar por defecto las rutas internas y Swagger, y exigir autenticación.
+8. Agregué el health check y probé los endpoints principales.
 
 ## 4) Validación realizada
 
-Durante la revisión del módulo se validó el comportamiento real del sistema con requests concretos a la API, cubriendo casos de:
+Probé la API con requests para comprobar estos casos:
 
 - carga correcta de documento de usuario
 - archivo faltante
@@ -164,25 +158,23 @@ Durante la revisión del módulo se validó el comportamiento real del sistema c
 - entidad no encontrada
 - comprobante asociado a orden/entrega
 
-También se comprobó que la API mantenga el formato estándar de errores, que el health check no exponga secretos y que el contenedor responda en health, Swagger y un endpoint principal.
+También revisé el formato de errores, que el health check no exponga secretos y que el contenedor respondiera en health, Swagger y un listado principal.
 
 ## 5) Testing y validación
 
-La suite funcional actual cuenta con **53 pruebas aprobadas**. Se usan Mocha, Chai y Supertest para probar las rutas sin iniciar un servidor HTTP externo; las pruebas funcionales se conectan a una base MongoDB de prueba.
+La suite tiene **57 pruebas funcionales** con Mocha, Chai y Supertest, y **21 pruebas unitarias** con Node.js. Para las pruebas que usan MongoDB configuro una URI local con `test` en el nombre de la base.
 
-| Módulo | Tests | Casos principales |
-|---|---:|---|
 | Módulo | Pruebas | Casos principales |
 |---|---:|---|
 | Usuarios | 11 | CRUD, permisos, hash de contraseña, filtros y paginación |
 | Pedidos | 8 | CRUD, estados, comprobantes, filtros y paginación |
 | Productos | 1 | Paginación y límite máximo |
 | Cargas de archivos | 6 | Carga válida, límites, tipos, duplicados y entidad inexistente |
-| Entregas | 8 | Estados, sincronización con pedidos, conflictos y paginación |
-| Mocks | 6 | Generación, seed y snapshots |
-| Logger / Swagger / health / 404 | 6 | Rutas técnicas, documentación, health check y errores |
+| Entregas | 9 | Estados, tracking, sincronización con pedidos, conflictos y paginación |
+| Mocks | 7 | Generación, seed, snapshots y consistencia de estados |
+| Logger / Swagger / health / 404 / CORS | 8 | Rutas técnicas, documentación, health check, errores y origen permitido |
 | Middleware de autenticación | 7 | JWT, roles y respuestas de autorización |
-| **Total** | **53** | **Suite funcional** |
+| **Total** | **57** | **Suite funcional** |
 
 Al comenzar el Módulo 7, los tests de uploads cubrían los casos principales de carga correcta, archivo faltante, tipo inválido y entidad inexistente. En la Entrega 8 la cobertura se amplió para incluir restricciones adicionales y duplicados.
 
@@ -194,16 +186,16 @@ npm test
 
 Requisitos:
 - Node.js 20+
-- MongoDB activo y accesible mediante `MONGO_URI_TEST` (o `MONGODB_URI_TEST`)
+- MongoDB local y URI de prueba (`MONGO_URI_TEST` o `MONGODB_URI_TEST`) con `test` en el nombre de la base
 - Variables definidas en `.env.test` o en el entorno
 
-En la última validación de la entrega se obtuvieron **53 pruebas aprobadas**. También se construyó la imagen Docker y se comprobaron el health check, Swagger y el listado de usuarios.
+En la última ejecución pasaron **57 pruebas funcionales y 21 unitarias**. También volví a construir la imagen Docker después de configurar `CLIENT_URL`.
 
-## 6) Riesgos, deuda técnica y próximos pasos
+## 6) Pendientes y cosas a tener en cuenta
 
 Luego de la Entrega 8, identifico las siguientes limitaciones y mejoras:
 
-**Decisiones que hice con conocimiento de riesgos**:
+**Riesgos que tengo presentes**:
 
 1. **Archivos locales y archivos huérfanos**
    - Riesgo: el almacenamiento local puede perderse si el volumen no tiene respaldo. Si falla la asociación después de la carga, puede quedar un archivo sin referencia.
@@ -219,7 +211,7 @@ Luego de la Entrega 8, identifico las siguientes limitaciones y mejoras:
    - Mejora futura: inspección del contenido y análisis antivirus antes de asociar el archivo.
 
 4. **Retención y observabilidad**
-   - Los logs rotativos locales no reemplazan un sistema centralizado.
+   - Los logs locales no reemplazan un sistema centralizado.
    - Mejora futura: centralizar logs y configurar alertas en el entorno de despliegue.
 
 5. **MongoDB con transacciones**
@@ -227,77 +219,28 @@ Luego de la Entrega 8, identifico las siguientes limitaciones y mejoras:
    - Una instancia standalone no iniciará con la configuración productiva.
    - Compose usa MongoDB standalone solo para desarrollo local y desactiva el requisito de transacciones.
 
-## 7) Cierre del Módulo 7 (registro histórico)
+## 7) Cierre del Módulo 7
 
-El proyecto quedó en un estado consistente entre implementación, documentación y criterio profesional. Todas las decisiones fueron documentadas para que se entienda por qué se eligió cada camino.
-
-### Checklist de entrega (Módulo 7)
-
-Validé que todo cumpliera con los criterios de evaluación:
-
-- ✅ **Multer configurado correctamente**
-  - diskStorage con nombres únicos (timestamp + random)
-  - Carpetas organizadas por tipo: documents, receipts, proofs
-  - Límites de tamaño: 5MB por archivo
-  - MIME types y extensiones validados en uploadMIddleware
-
-- ✅ **Archivos asociados a entidades**
-  - Users: `documents` array con metadatos
-  - Orders: `proofs` array con metadatos
-  - Deliveries: comprobantes asociados con sus metadatos
-  - Metadata guardado en MongoDB, archivos en servidor
-  - La API devuelve referencias y metadatos; no implementa descarga del contenido binario
-
-- ✅ **Validaciones y errores**
-  - Archivo requerido → MISSING_FILE
-  - Tipo MIME inválido → INVALID_FILE_TYPE
-  - Extensión no permitida → rechazado en Multer
-  - Tamaño excedido → FILE_TOO_LARGE
-  - Tipo de documento inválido → INVALID_DOCUMENT_TYPE
-  - Entidad no existe → 404 con código específico
-  - Formato centralizado en ErrorDictionary
-
-- ✅ **Documentación y logging**
-  - Endpoints en Swagger: marcados como multipart/form-data
-  - README.md: sección "Carga de archivos" con ejemplos curl
-  - BITACORA.md: decisiones y criterios documentados
-  - Winston logger: eventos registrados (upload, validación, error)
-  - Archivos rotados diariamente
+En ese módulo dejé separadas las validaciones del archivo, la asociación con la entidad y la respuesta HTTP.
 
 
-### Reflexiones y decisiones clave tomadas
+### Cómo quedó el flujo de archivos
 
-**Separación de responsabilidades**:
-- `uploadFileMiddleware.js`: valida archivo (Multer level)
-- `userService.js`: valida entidad + asocia (Business logic)
-- `errorHandler.js`: normaliza error (HTTP response)
-- Esta separación hace que sea fácil reutilizar o cambiar
+- `uploadFileMiddleware.js` valida el archivo.
+- El servicio comprueba la entidad y asocia los metadatos.
+- `errorHandler.js` prepara la respuesta de error.
 
-### Prioridades mantenidas
+### Lo que prioricé
 
-- ✅ corrección técnica
-- ✅ claridad de diseño  
-- ✅ trazabilidad operativa
-- ✅ almacenamiento mínimo y seguro
-- ✅ documentación estudiante-first (explicar decisiones, no solo qué)
-- documentación útil para integración y revisión
-- escalabilidad para futuras entidades y validaciones
+- que las validaciones y los errores fueran consistentes
+- guardar los archivos fuera del repositorio
+- explicar en el README cómo instalar, probar y ejecutar la API
 
 ## 8) Cierre de la Entrega 8
 
-La API conserva sus endpoints principales y suma límites explícitos para listados y cargas, configuración validada al inicio, un health check y una imagen Docker ejecutada como usuario no-root. La configuración de producción exige `JWT_SECRET` y desactiva por defecto mocks, logger test y Swagger. El puerto interno del contenedor es `3003`.
+La API conserva sus endpoints principales y suma límites para listados y cargas, configuración validada al inicio, un health check y una imagen Docker que corre con un usuario no-root. En producción, `JWT_SECRET` y `CLIENT_URL` son obligatorios; mocks, logger de prueba y Swagger quedan desactivados por defecto. El puerto interno del contenedor es `3003`.
 
-### Checklist de entrega
-
-- [x] Listados de usuarios, pedidos, entregas y productos con máximo de 100 resultados por página.
-- [x] Uploads limitados a 5 MB y a PDF, PNG o JPEG; los errores de carga tienen respuestas controladas.
-- [x] Variables críticas validadas al iniciar y separadas mediante `.env.example`, `.env.test.example` y variables del entorno productivo.
-- [x] Health check en `/api/health` sin URI de base de datos ni secretos.
-- [x] `Dockerfile`, `.dockerignore` y `compose.yaml` disponibles.
-- [x] README con ejecución local, pruebas, Swagger, variables y ejecución del contenedor.
-- [x] `npm test`: 53 pruebas funcionales aprobadas.
-- [x] Prueba de contenedor: health, Swagger y listado principal disponibles.
 
 ### Aprendizaje
 
-En esta etapa comprobé que preparar una API para despliegue no consiste solo en crear una imagen. También hay que limitar las consultas y los archivos, separar los valores por entorno, evitar copiar secretos al contexto Docker y documentar qué datos persisten. Como siguiente mejora técnica queda automatizar la limpieza de uploads huérfanos y definir formalmente su retención.
+Me quedó claro que preparar la API para Docker no es solo crear la imagen: también tuve que revisar los límites, las variables de entorno y qué archivos se guardan. Me queda pendiente automatizar la limpieza de uploads huérfanos y definir cuánto tiempo conservarlos.

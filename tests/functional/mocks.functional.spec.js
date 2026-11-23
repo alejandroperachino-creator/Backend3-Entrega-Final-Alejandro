@@ -1,6 +1,7 @@
 import { expect } from 'chai';
 import request from 'supertest';
 import app from '../../src/app.js';
+import { DELIVERY_STATUS } from '../../src/constants/index.js';
 
 describe('Functional - Mocks API', () => {
   it('GET /api/mocks/users genera mocks válidos y repetibles por seed', async () => {
@@ -73,6 +74,33 @@ describe('Functional - Mocks API', () => {
       message: 'La cantidad de mocks debe ser un numero entero positivo mayor a cero.'
     });
     expect(response.body.error.id).to.be.a('number');
+  });
+
+  it('GET /api/mocks/deliveries alinea conductor y fechas con el estado', async () => {
+    const response = await request(app)
+      .get('/api/mocks/deliveries')
+      .query({ qty: 4, seed: 456 });
+
+    expect(response.status).to.equal(200);
+    expect(response.body.payload).to.have.length(4);
+
+    const [pending, assigned, inTransit, delivered] = response.body.payload;
+    expect(pending.status).to.equal(DELIVERY_STATUS.PENDING);
+    expect(pending.driver).to.equal(null);
+    expect(pending.assignedAt).to.equal(null);
+    expect(pending.deliveredAt).to.equal(null);
+
+    for (const delivery of [assigned, inTransit, delivered]) {
+      expect(delivery.driver).to.be.a('string');
+      expect(delivery.assignedAt).to.be.a('string');
+    }
+
+    expect(assigned.status).to.equal(DELIVERY_STATUS.ASSIGNED);
+    expect(assigned.deliveredAt).to.equal(null);
+    expect(inTransit.status).to.equal(DELIVERY_STATUS.IN_TRANSIT);
+    expect(inTransit.deliveredAt).to.equal(null);
+    expect(delivered.status).to.equal(DELIVERY_STATUS.DELIVERED);
+    expect(delivered.deliveredAt).to.be.a('string');
   });
 
   it('GET /api/mocks/snapshot genera un snapshot completo', async () => {

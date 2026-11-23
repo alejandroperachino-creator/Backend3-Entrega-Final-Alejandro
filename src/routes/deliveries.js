@@ -349,6 +349,31 @@ router.get('/', deliveryController.getAll);
 
 /**
  * @openapi
+ * /api/deliveries/{id}/tracking:
+ *   get:
+ *     summary: Consultar el seguimiento de una entrega
+ *     tags: ["Tracking"]
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: string
+ *         description: ID de la entrega
+ *     responses:
+ *       200:
+ *         $ref: "#/components/responses/DeliveryOk"
+ *       400:
+ *         $ref: "#/components/responses/DeliveryInvalidIdError"
+ *       404:
+ *         $ref: "#/components/responses/DeliveryNotFoundError"
+ *       500:
+ *         $ref: "#/components/responses/DeliveryInternalServerError"
+ */
+router.get('/:id/tracking', validateObjectIdParam('id'), deliveryController.getById);
+
+/**
+ * @openapi
  * /api/deliveries/{id}:
  *   get:
  *     summary: Obtener una entrega por ID

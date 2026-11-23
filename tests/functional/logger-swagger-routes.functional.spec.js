@@ -1,8 +1,22 @@
 import { expect } from 'chai';
 import request from 'supertest';
 import app from '../../src/app.js';
+import swaggerSpec from '../../src/config/swagger.js';
+import config from '../../src/config/env.config.js';
 
 describe('Functional - Logger, Swagger y rutas inexistentes', () => {
+  it('CORS permite solo el origen configurado', async () => {
+    const allowedResponse = await request(app)
+      .get('/api/health')
+      .set('Origin', config.clientUrl);
+    const blockedResponse = await request(app)
+      .get('/api/health')
+      .set('Origin', 'https://unapproved.example');
+
+    expect(allowedResponse.headers['access-control-allow-origin']).to.equal(config.clientUrl);
+    expect(blockedResponse.headers).to.not.have.property('access-control-allow-origin');
+  });
+
   it('GET /api/health expone estado y métricas básicas sin datos sensibles', async () => {
     const response = await request(app).get('/api/health');
 
@@ -56,6 +70,18 @@ describe('Functional - Logger, Swagger y rutas inexistentes', () => {
     expect(response.status).to.equal(200);
     expect(response.headers['content-type']).to.include('text/html');
     expect(response.text).to.include('Swagger UI');
+  });
+
+  it('Swagger documenta health, tracking y los schemas de entrega', () => {
+    expect(swaggerSpec.paths).to.have.property('/api/health');
+    expect(swaggerSpec.paths).to.have.property('/api/deliveries/{id}/tracking');
+    expect(swaggerSpec.components.schemas).to.include.keys(
+      'Shipment',
+      'User',
+      'ErrorResponse',
+      'SuccessResponse',
+      'HealthResponse'
+    );
   });
 
   it('GET /api/ruta-inexistente responde 404 con formato de error estándar', async () => {

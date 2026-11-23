@@ -170,14 +170,18 @@ class MockService {
   }
 
   buildMockDelivery(index = 0) {
+    const status = Object.values(DELIVERY_STATUS)[index % Object.values(DELIVERY_STATUS).length];
+    const assigned = status !== DELIVERY_STATUS.PENDING;
+    const timestamp = new Date().toISOString();
+
     return {
       id: `del_mock_${index + 1}`,
       order: `ord_mock_${index + 1}`,
-      driver: `driver_${index + 1}`,
-      status: Object.values(DELIVERY_STATUS)[index % Object.values(DELIVERY_STATUS).length],
+      driver: assigned ? `driver_${index + 1}` : null,
+      status,
       priority: Object.values(ORDER_PRIORITY)[index % Object.values(ORDER_PRIORITY).length],
-      assignedAt: new Date().toISOString(),
-      deliveredAt: index % 3 === 2 ? new Date().toISOString() : null
+      assignedAt: assigned ? timestamp : null,
+      deliveredAt: status === DELIVERY_STATUS.DELIVERED ? timestamp : null
     };
   }
 
