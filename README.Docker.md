@@ -38,13 +38,15 @@ health check en `/api/health`.
 
 ## Ejecutar la imagen con una base externa
 
-Configura `NODE_ENV=production`, `PORT=3003`, `MONGODB_URI`, `JWT_SECRET` y
-`CLIENT_URL` (origen exacto del frontend) y `LOG_LEVEL=info` con un gestor de
-secretos o un archivo `.env.production` local que no se agregue al repositorio.
-`AUTH_REQUIRED` no puede deshabilitarse y requiere `JWT_SECRET`. La URI debe
-ser accesible desde el contenedor (no uses `localhost` para una base que corre
-en el host) y apuntar a un replica set o mongos para soportar transacciones en
-producción.
+En un archivo `.env.production` local configura `NODE_ENV=production`,
+`PORT=3003`, `MONGODB_URI`, `JWT_SECRET`, `CLIENT_URL` (el origen del frontend,
+sin ruta) y `LOG_LEVEL=info`. No subas ese archivo al repositorio; también
+puedes configurar estos valores con un gestor de secretos.
+
+`AUTH_REQUIRED` no puede deshabilitarse y requiere `JWT_SECRET`. La URI de
+MongoDB debe ser accesible desde el contenedor (no uses `localhost` para una
+base que corre en el host) y apuntar a un replica set o mongos para soportar
+transacciones en producción.
 
 ```bash
 docker run --rm -p 3003:3003 --env-file .env.production -v shipnow-uploads:/shipnow-uploads shipnow-api:local
