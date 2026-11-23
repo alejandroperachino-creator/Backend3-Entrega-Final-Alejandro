@@ -572,5 +572,3 @@ Al implementar la API, prioricé:
 El historial técnico y decisiones del proyecto está en:
 
 - `BITACORA_PROYECTO.md`
-#   B a c k e n d 3 - E n t r e g a - F i n a l - A l e j a n d r o  
- 
