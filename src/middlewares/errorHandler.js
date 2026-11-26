@@ -1,4 +1,5 @@
 import multer from 'multer';
+import { unlink } from 'node:fs/promises';
 import logger from '../utils/logger.js';
 import { CustomError, ErrorDictionary, getErrorIdByCode } from '../utils/errors.js';
 
@@ -139,9 +140,23 @@ const normalizeError = (error) => {
     return formattedError;
 };
 
-export const errorHandler = (error, req, res, next) => {
+export const errorHandler = async (error, req, res, next) => {
     if (res.headersSent) {
         return next(error);
+    }
+
+    if (req.file?.path) {
+        try {
+            await unlink(req.file.path);
+        } catch (cleanupError) {
+            if (cleanupError.code !== 'ENOENT') {
+                logger.error('No se pudo eliminar el archivo subido tras fallar la solicitud', {
+                    requestId: req?.requestId ?? '',
+                    filePath: req.file.path,
+                    error: cleanupError.message
+                });
+            }
+        }
     }
 
     const normalizedError = normalizeError(error);

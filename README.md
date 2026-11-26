@@ -1,6 +1,6 @@
 # ShipNow API (Backend III)
 
-ShipNow es una API para gestionar usuarios, pedidos y entregas, y asociarles documentos y comprobantes. La fui armando por módulos durante el curso; esta versión también incluye pruebas, logs, Swagger y Docker.
+ShipNow es una API para gestionar usuarios, pedidos y entregas, y asociarles documentos y comprobantes. Esta versión consolida el flujo de negocio, las pruebas, el logging, Swagger y Docker.
 
 ## Estado de entrega
 
@@ -242,19 +242,19 @@ npm test
 
 ### Cobertura de tests
 
-La suite funcional tiene **57 pruebas** y la unitaria, **21**:
+La suite funcional tiene **61 pruebas** y la unitaria, **21**:
 
 | Suite | Tests | Cobertura |
 |-------|-------|-----------|
 | API de usuarios | 11 | CRUD, permisos, carga de documentos, hash de contraseña, filtros y paginación |
 | API de pedidos | 8 | CRUD, estados, comprobantes, filtros y paginación |
 | API de productos | 1 | Paginación y límite máximo |
-| Cargas de archivos | 6 | Carga válida, archivo faltante, tipos, duplicados y entidad inexistente |
+| Cargas de archivos | 10 | Documentos, comprobantes, tipo MIME/extensión, tamaño, duplicados y limpieza ante errores |
 | API de entregas | 9 | Estados, tracking, sincronización con pedidos, conflictos y paginación |
 | API de mocks | 7 | Generación de usuarios/pedidos/entregas, snapshots y validación de seed |
 | Logger / Swagger / health / 404 / CORS | 8 | Rutas técnicas, documentación, health check, errores y origen permitido |
 | Middleware de autenticación | 7 | JWT, roles permitidos y denegados |
-| **Total funcional** | **57** | **Todas aprobadas** |
+| **Total funcional** | **61** | **Todas aprobadas** |
 
 Las 21 pruebas unitarias cubren errores, logger, validación segura de la base de
 test, controlador de pedidos, repositorio y endpoint de usuarios. `npm test` ejecuta
@@ -272,7 +272,7 @@ Copy-Item .env.test.example .env.test
 ```
 
 - El setup rechaza hosts remotos y bases cuyo nombre no identifica testing
-- La carpeta de uploads se crea automáticamente y debe tener permisos de escritura.
+- La suite funcional crea una carpeta temporal aislada para los uploads y la elimina al finalizar. Para ejecutar la aplicación manualmente, `UPLOAD_BASE_DIR` debe tener permisos de escritura.
 
 ### Ejecución de tests
 
@@ -282,19 +282,23 @@ npm test
 
 # Resultado esperado
 # 21 pruebas unitarias aprobadas
-# 57 pruebas funcionales aprobadas
+# 61 pruebas funcionales aprobadas
 ```
 
 ### Tests de carga de archivos (Módulo 7)
 
-Las 6 pruebas de carga de archivos validan:
+Las 10 pruebas de carga de archivos validan:
 
 1. **Carga exitosa**: documento válido con metadatos
 2. **Archivo faltante**: error MISSING_FILE (400)
-3. **Tipo no permitido**: error INVALID_DOCUMENT_TYPE (400)
-4. **Duplicado permitido por tipo** cuando el binario es distinto
-5. **Duplicado binario bloqueado** con RESOURCE_CONFLICT_ERROR (409)
-6. **Entidad no existe**: error DELIVERY_NOT_FOUND_ERROR (404)
+3. **Tipo de documento inválido**: error INVALID_DOCUMENT_TYPE (400)
+4. **MIME y extensión incompatibles**: error INVALID_FILE_TYPE (400)
+5. **Archivo mayor al límite**: error FILE_TOO_LARGE (400)
+6. **Duplicado permitido por tipo** cuando el binario es distinto
+7. **Duplicado binario bloqueado** con RESOURCE_CONFLICT_ERROR (409), sin dejar un archivo huérfano
+8. **Comprobante de pedido** asociado y persistido correctamente
+9. **Comprobante de entrega** asociado y persistido correctamente
+10. **Entidad inexistente**: error DELIVERY_NOT_FOUND_ERROR (404), sin dejar un archivo huérfano
 
 ## Rutas principales
 
@@ -308,13 +312,20 @@ Base: `/api`
   - `PUT /api/users/:id`
   - `DELETE /api/users/:id`
   - `POST /api/users/:id/documents`
-- Pedidos:
+- Pedidos / envíos (`Order` / `Shipment`):
+  - En este contrato, el recurso de envío se representa como pedido y usa `/api/orders`; la entrega y su tracking usan `/api/deliveries`.
   - `GET /api/orders`
   - `GET /api/orders/:id`
   - `POST /api/orders`
   - `PUT /api/orders/:id`
   - `DELETE /api/orders/:id`
   - `POST /api/orders/:id/proof`
+- Productos:
+  - `GET /api/products`
+  - `GET /api/products/:id`
+  - `POST /api/products`
+  - `PUT /api/products/:id`
+  - `DELETE /api/products/:id`
 - Entregas:
   - `GET /api/deliveries`
   - `GET /api/deliveries/:id`
@@ -324,13 +335,19 @@ Base: `/api`
   - `DELETE /api/deliveries/:id`
   - `POST /api/deliveries/:id/proof`
 - Mocks:
+  - `GET /api/mocks/user`
   - `GET /api/mocks/users`
   - `GET /api/mocks/orders`
   - `GET /api/mocks/deliveries`
   - `GET /api/mocks/snapshot`
   - `POST /api/mocks/seed`
+  - `POST /api/mocks/seed/users`
+  - `POST /api/mocks/seed/orders`
+  - `POST /api/mocks/seed/deliveries`
+  - `POST /api/mocks/seed/all`
 - Logger técnico:
   - `GET /api/logger`
+  - `GET /api/logger/test`
   - `GET /api/logger/error`
 
 ## Carga de archivos y documentos (Módulo 7)

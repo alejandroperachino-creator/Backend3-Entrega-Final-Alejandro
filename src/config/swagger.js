@@ -71,7 +71,7 @@ const options = {
                     }
                 },
                 Shipment: {
-                    description: 'Representación del envío logístico de ShipNow, basado en una orden.',
+                    description: 'Representación del envío de ShipNow expuesta como Pedido (Order) en /api/orders. Las entregas y el tracking se exponen en /api/deliveries.',
                     allOf: [
                         { $ref: '#/components/schemas/Order' }
                     ]

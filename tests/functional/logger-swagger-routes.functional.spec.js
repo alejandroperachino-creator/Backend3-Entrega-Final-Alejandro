@@ -74,13 +74,20 @@ describe('Functional - Logger, Swagger y rutas inexistentes', () => {
 
   it('Swagger documenta health, tracking y los schemas de entrega', () => {
     expect(swaggerSpec.paths).to.have.property('/api/health');
+    expect(swaggerSpec.paths['/api/orders']).to.include.keys('get', 'post');
+    expect(swaggerSpec.paths).to.have.property('/api/orders/{id}/proof');
     expect(swaggerSpec.paths).to.have.property('/api/deliveries/{id}/tracking');
+    expect(swaggerSpec.paths).to.have.property('/api/deliveries/{id}/proof');
+    expect(swaggerSpec.paths).to.have.property('/api/users/{id}/documents');
     expect(swaggerSpec.components.schemas).to.include.keys(
       'Shipment',
       'User',
       'ErrorResponse',
       'SuccessResponse',
       'HealthResponse'
+    );
+    expect(swaggerSpec.components.schemas.Shipment.allOf[0].$ref).to.equal(
+      '#/components/schemas/Order'
     );
   });
 
