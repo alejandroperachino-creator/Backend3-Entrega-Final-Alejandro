@@ -1,6 +1,6 @@
 {
   "name": "shipnow-v1",
-  "version": "1.0.0",
+  "version": "1.1.9",
   "description": "ShipNow API - Versión 1 (punto de partida de la semana)",
   "main": "src/server.js",
   "type": "module",
